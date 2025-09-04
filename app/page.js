@@ -13,16 +13,22 @@ export default function Dashboard() {
   useEffect(() => {
     const fetchData = async () => {
       try {
+        // 🔹 Resetear valores al cambiar moneda
+        setPrice(null);
+        setHistory([]);
+
         // Precio actual
         const resPrice = await fetch(
-          `https://api.coingecko.com/api/v3/simple/price?ids=${coin}&vs_currencies=usd`
+          `https://api.coingecko.com/api/v3/simple/price?ids=${coin}&vs_currencies=usd`,
+          { cache: "no-store" } // evita usar datos viejos
         );
         const jsonPrice = await resPrice.json();
         setPrice(jsonPrice[coin].usd);
 
         // Histórico de 7 días
         const resHistory = await fetch(
-          `https://api.coingecko.com/api/v3/coins/${coin}/market_chart?vs_currency=usd&days=7`
+          `https://api.coingecko.com/api/v3/coins/${coin}/market_chart?vs_currency=usd&days=7`,
+          { cache: "no-store" }
         );
         const jsonHistory = await resHistory.json();
 
@@ -41,7 +47,7 @@ export default function Dashboard() {
     };
 
     fetchData();
-  }, [coin]); // 🔹 se actualiza cada vez que cambia la moneda seleccionada
+  }, [coin]); // 👈 se actualiza cada vez que cambias de moneda
 
   return (
     <div className="p-8">
@@ -84,3 +90,4 @@ export default function Dashboard() {
     </div>
   );
 }
+
