@@ -24,9 +24,11 @@ export default function Dashboard() {
   };
 
   useEffect(() => {
+    const controller = new AbortController(); // 👈 para cancelar peticiones viejas
+
     const fetchData = async () => {
       try {
-        setLoading(true); // 🔹 Empieza a cargar
+        setLoading(true);
         setPrice(null);
         setHistory([]);
         setSignal("");
@@ -34,7 +36,7 @@ export default function Dashboard() {
         // Precio actual
         const resPrice = await fetch(
           `https://api.coingecko.com/api/v3/simple/price?ids=${coin}&vs_currencies=usd`,
-          { cache: "no-store" }
+          { cache: "no-store", signal: controller.signal }
         );
         const jsonPrice = await resPrice.json();
         setPrice(jsonPrice[coin]?.usd || null);
@@ -42,7 +44,7 @@ export default function Dashboard() {
         // Histórico
         const resHistory = await fetch(
           `https://api.coingecko.com/api/v3/coins/${coin}/market_chart?vs_currency=usd&days=30`,
-          { cache: "no-store" }
+          { cache: "no-store", signal: controller.signal }
         );
         const jsonHistory = await resHistory.json();
 
@@ -70,13 +72,18 @@ export default function Dashboard() {
           }
         }
       } catch (err) {
-        console.error("Error cargando datos:", err);
+        if (err.name !== "AbortError") {
+          console.error("Error cargando datos:", err);
+        }
       } finally {
-        setLoading(false); // 🔹 Terminó de cargar
+        setLoading(false);
       }
     };
 
     fetchData();
+
+    // 🔹 Cancelar si se cambia de moneda antes de terminar
+    return () => controller.abort();
   }, [coin]);
 
   return (
@@ -93,7 +100,7 @@ export default function Dashboard() {
             <p className="text-gray-600">
               Precio actual:{" "}
               <span className="font-semibold text-black">
-                {price ? `$${price}` : "Cargando..."}
+                {loading ? "Cargando..." : price ? `$${price}` : "Sin datos"}
               </span>
             </p>
           </div>
@@ -113,7 +120,7 @@ export default function Dashboard() {
         {/* Señal */}
         <div className="mb-6 text-xl font-semibold text-center">
           {loading
-            ? "Cargando señal..."
+            ? "⏳ Cargando señal..."
             : signal
             ? signal.includes("alcista")
               ? <span className="text-green-600">{signal}</span>
