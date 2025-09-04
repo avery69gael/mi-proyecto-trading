@@ -10,8 +10,9 @@ export default function Dashboard() {
   const [price, setPrice] = useState(null);
   const [history, setHistory] = useState([]);
   const [signal, setSignal] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  // 🔹 Función para calcular media móvil
+  // 🔹 Calcular media móvil
   const movingAverage = (data, windowSize) => {
     return data.map((_, i) => {
       if (i < windowSize - 1) return { ...data[i], [`ma${windowSize}`]: null };
@@ -25,6 +26,7 @@ export default function Dashboard() {
   useEffect(() => {
     const fetchData = async () => {
       try {
+        setLoading(true); // 🔹 Empieza a cargar
         setPrice(null);
         setHistory([]);
         setSignal("");
@@ -35,9 +37,9 @@ export default function Dashboard() {
           { cache: "no-store" }
         );
         const jsonPrice = await resPrice.json();
-        setPrice(jsonPrice[coin].usd);
+        setPrice(jsonPrice[coin]?.usd || null);
 
-        // Histórico (30 días para calcular MA30)
+        // Histórico
         const resHistory = await fetch(
           `https://api.coingecko.com/api/v3/coins/${coin}/market_chart?vs_currency=usd&days=30`,
           { cache: "no-store" }
@@ -52,23 +54,25 @@ export default function Dashboard() {
           };
         });
 
-        // Calcular medias móviles
+        // Medias móviles
         let withMA7 = movingAverage(formatted, 7);
         let withMA30 = movingAverage(withMA7, 30);
 
         setHistory(withMA30);
 
-        // Señal alcista o bajista (último dato)
+        // Señal
         const last = withMA30[withMA30.length - 1];
-        if (last.ma7 && last.ma30) {
+        if (last?.ma7 && last?.ma30) {
           if (last.ma7 > last.ma30) {
-            setSignal("📈 Tendencia alcista (MA7 > MA30)");
+            setSignal("📈 Tendencia alcista");
           } else {
-            setSignal("📉 Tendencia bajista (MA7 < MA30)");
+            setSignal("📉 Tendencia bajista");
           }
         }
       } catch (err) {
         console.error("Error cargando datos:", err);
+      } finally {
+        setLoading(false); // 🔹 Terminó de cargar
       }
     };
 
@@ -76,50 +80,68 @@ export default function Dashboard() {
   }, [coin]);
 
   return (
-    <div className="p-8">
-      <h1 className="text-3xl font-bold mb-6">📊 Dashboard IA Trading</h1>
+    <div className="min-h-screen bg-gray-100 p-8">
+      <h1 className="text-4xl font-bold text-center mb-10 text-blue-700">
+        🚀 Dashboard IA Trading
+      </h1>
 
-      {/* 🔹 Selector de monedas */}
-      <div className="mb-6">
-        <label className="mr-2 font-semibold">Selecciona una moneda:</label>
-        <select
-          className="border rounded px-2 py-1"
-          value={coin}
-          onChange={(e) => setCoin(e.target.value)}
-        >
-          <option value="bitcoin">Bitcoin (BTC)</option>
-          <option value="ethereum">Ethereum (ETH)</option>
-          <option value="solana">Solana (SOL)</option>
-          <option value="dogecoin">Dogecoin (DOGE)</option>
-        </select>
-      </div>
+      <div className="max-w-4xl mx-auto bg-white rounded-2xl shadow-lg p-6">
+        {/* Selector */}
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h2 className="text-2xl font-bold capitalize">{coin}</h2>
+            <p className="text-gray-600">
+              Precio actual:{" "}
+              <span className="font-semibold text-black">
+                {price ? `$${price}` : "Cargando..."}
+              </span>
+            </p>
+          </div>
 
-      {/* 🔹 Precio actual */}
-      <p className="mb-2 text-lg">
-        Precio actual de{" "}
-        <span className="font-semibold capitalize">{coin}</span>:{" "}
-        {price ? `$${price}` : "Cargando..."}
-      </p>
+          <select
+            className="border rounded px-3 py-2 shadow-sm"
+            value={coin}
+            onChange={(e) => setCoin(e.target.value)}
+          >
+            <option value="bitcoin">Bitcoin (BTC)</option>
+            <option value="ethereum">Ethereum (ETH)</option>
+            <option value="solana">Solana (SOL)</option>
+            <option value="dogecoin">Dogecoin (DOGE)</option>
+          </select>
+        </div>
 
-      {/* 🔹 Señal */}
-      <p className="mb-6 text-xl font-bold">
-        {signal ? signal : "Calculando señal..."}
-      </p>
+        {/* Señal */}
+        <div className="mb-6 text-xl font-semibold text-center">
+          {loading
+            ? "Cargando señal..."
+            : signal
+            ? signal.includes("alcista")
+              ? <span className="text-green-600">{signal}</span>
+              : <span className="text-red-600">{signal}</span>
+            : "Sin datos"}
+        </div>
 
-      {/* 🔹 Gráfico */}
-      <div className="w-full h-80 mb-6">
-        <ResponsiveContainer>
-          <LineChart data={history}>
-            <CartesianGrid stroke="#ccc" />
-            <XAxis dataKey="date" />
-            <YAxis domain={["auto", "auto"]} />
-            <Tooltip />
-            <Legend />
-            <Line type="monotone" dataKey="price" stroke="#2563eb" strokeWidth={2} name="Precio" />
-            <Line type="monotone" dataKey="ma7" stroke="#16a34a" strokeWidth={2} dot={false} name="MA7" />
-            <Line type="monotone" dataKey="ma30" stroke="#dc2626" strokeWidth={2} dot={false} name="MA30" />
-          </LineChart>
-        </ResponsiveContainer>
+        {/* Gráfico */}
+        <div className="w-full h-96">
+          {loading ? (
+            <p className="text-center text-gray-500 mt-20">⏳ Cargando gráfico...</p>
+          ) : history.length > 0 ? (
+            <ResponsiveContainer>
+              <LineChart data={history}>
+                <CartesianGrid stroke="#eee" />
+                <XAxis dataKey="date" />
+                <YAxis domain={["auto", "auto"]} />
+                <Tooltip />
+                <Legend />
+                <Line type="monotone" dataKey="price" stroke="#2563eb" strokeWidth={2} name="Precio" />
+                <Line type="monotone" dataKey="ma7" stroke="#16a34a" strokeWidth={2} dot={false} name="MA7" />
+                <Line type="monotone" dataKey="ma30" stroke="#dc2626" strokeWidth={2} dot={false} name="MA30" />
+              </LineChart>
+            </ResponsiveContainer>
+          ) : (
+            <p className="text-center text-gray-500 mt-20">No hay datos para mostrar</p>
+          )}
+        </div>
       </div>
     </div>
   );
