@@ -8,6 +8,7 @@ import {
 export default function Dashboard() {
   const [coin, setCoin] = useState("bitcoin");
   const [price, setPrice] = useState(null);
+  const [prevPrice, setPrevPrice] = useState(null);
   const [history, setHistory] = useState([]);
   const [signal, setSignal] = useState("");
   const [loading, setLoading] = useState(false);
@@ -24,11 +25,12 @@ export default function Dashboard() {
   };
 
   useEffect(() => {
-    const controller = new AbortController(); // 👈 para cancelar peticiones viejas
+    const controller = new AbortController();
 
     const fetchData = async () => {
       try {
         setLoading(true);
+        setPrevPrice(price); // guardamos el precio anterior
         setPrice(null);
         setHistory([]);
         setSignal("");
@@ -81,32 +83,39 @@ export default function Dashboard() {
     };
 
     fetchData();
-
-    // 🔹 Cancelar si se cambia de moneda antes de terminar
     return () => controller.abort();
   }, [coin]);
 
   return (
     <div className="min-h-screen bg-gray-100 p-8">
-      <h1 className="text-4xl font-bold text-center mb-10 text-blue-700">
+      <h1 className="text-4xl font-extrabold text-center mb-10 text-blue-700 tracking-tight">
         🚀 Dashboard IA Trading
       </h1>
 
-      <div className="max-w-4xl mx-auto bg-white rounded-2xl shadow-lg p-6">
-        {/* Selector */}
-        <div className="flex items-center justify-between mb-6">
+      <div className="max-w-5xl mx-auto bg-white rounded-2xl shadow-lg p-8">
+        {/* Selector y precio */}
+        <div className="flex items-center justify-between mb-8">
           <div>
             <h2 className="text-2xl font-bold capitalize">{coin}</h2>
-            <p className="text-gray-600">
-              Precio actual:{" "}
-              <span className="font-semibold text-black">
-                {loading ? "Cargando..." : price ? `$${price}` : "Sin datos"}
-              </span>
-            </p>
+            <div
+              className={`mt-2 px-4 py-2 rounded-lg text-lg font-semibold shadow-sm inline-block ${
+                price && prevPrice
+                  ? price > prevPrice
+                    ? "bg-green-100 text-green-700"
+                    : "bg-red-100 text-red-700"
+                  : "bg-gray-100 text-gray-700"
+              }`}
+            >
+              {loading
+                ? "⏳ Cargando..."
+                : price
+                ? `$${price.toLocaleString()}`
+                : "Sin datos"}
+            </div>
           </div>
 
           <select
-            className="border rounded px-3 py-2 shadow-sm"
+            className="border rounded-lg px-4 py-2 shadow-sm focus:ring-2 focus:ring-blue-400"
             value={coin}
             onChange={(e) => setCoin(e.target.value)}
           >
@@ -118,9 +127,14 @@ export default function Dashboard() {
         </div>
 
         {/* Señal */}
-        <div className="mb-6 text-xl font-semibold text-center">
+        <div className="mb-8 text-xl font-semibold text-center">
           {loading
-            ? "⏳ Cargando señal..."
+            ? (
+              <div className="flex justify-center items-center">
+                <div className="animate-spin h-6 w-6 border-4 border-blue-500 border-t-transparent rounded-full mr-2"></div>
+                <span>Cargando señal...</span>
+              </div>
+            )
             : signal
             ? signal.includes("alcista")
               ? <span className="text-green-600">{signal}</span>
@@ -131,7 +145,9 @@ export default function Dashboard() {
         {/* Gráfico */}
         <div className="w-full h-96">
           {loading ? (
-            <p className="text-center text-gray-500 mt-20">⏳ Cargando gráfico...</p>
+            <div className="flex justify-center items-center h-full">
+              <div className="animate-spin h-12 w-12 border-4 border-blue-500 border-t-transparent rounded-full"></div>
+            </div>
           ) : history.length > 0 ? (
             <ResponsiveContainer>
               <LineChart data={history}>
