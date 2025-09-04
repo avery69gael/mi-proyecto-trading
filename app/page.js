@@ -2,99 +2,54 @@
 
 import { useState, useEffect } from "react";
 import {
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  Tooltip,
-  ResponsiveContainer,
-  CartesianGrid,
+  LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer
 } from "recharts";
 
 export default function Dashboard() {
+  const [btcPrice, setBtcPrice] = useState(null);
   const [data, setData] = useState([]);
 
+  // 🔹 Llamada a la API de CoinGecko
   useEffect(() => {
-    // Datos de ejemplo (luego se conectarán a tu IA/backend)
-    const exampleData = [
-      { date: "2025-08-25", price: 61000, proba: 0.62, signal: "BUY" },
-      { date: "2025-08-26", price: 61800, proba: 0.58, signal: "BUY" },
-      { date: "2025-08-27", price: 60500, proba: 0.45, signal: "SELL" },
-      { date: "2025-08-28", price: 61200, proba: 0.51, signal: "HOLD" },
-      { date: "2025-08-29", price: 62000, proba: 0.65, signal: "BUY" },
-    ];
-    setData(exampleData);
+    const fetchBTC = async () => {
+      try {
+        const res = await fetch(
+          "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd"
+        );
+        const json = await res.json();
+        setBtcPrice(json.bitcoin.usd);
+
+        // Simulación de histórico con datos random alrededor del precio actual
+        const fakeData = Array.from({ length: 10 }).map((_, i) => ({
+          name: `T${i + 1}`,
+          value: json.bitcoin.usd + (Math.random() * 2000 - 1000),
+        }));
+        setData(fakeData);
+      } catch (err) {
+        console.error("Error cargando BTC:", err);
+      }
+    };
+
+    fetchBTC();
   }, []);
 
   return (
-    <div className="min-h-screen bg-gray-50 p-6">
-      <h1 className="text-3xl font-bold mb-4 text-center">
-        📊 Dashboard IA - Trading
-      </h1>
+    <div className="p-8">
+      <h1 className="text-3xl font-bold mb-4">📈 Dashboard IA Trading</h1>
+      <p className="mb-6">Precio actual de Bitcoin: {btcPrice ? `$${btcPrice}` : "Cargando..."}</p>
 
-      {/* Gráfico */}
-      <div className="mb-6 rounded-2xl shadow bg-white p-4">
-        <h2 className="text-xl font-semibold mb-2">Bitcoin (BTC/USDT)</h2>
-        <ResponsiveContainer width="100%" height={300}>
+      <div className="w-full h-64 mb-6">
+        <ResponsiveContainer>
           <LineChart data={data}>
-            <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey="date" />
+            <CartesianGrid stroke="#ccc" />
+            <XAxis dataKey="name" />
             <YAxis />
             <Tooltip />
-            <Line
-              type="monotone"
-              dataKey="price"
-              stroke="#2563eb"
-              name="Precio"
-            />
+            <Line type="monotone" dataKey="value" stroke="#8884d8" strokeWidth={2} />
           </LineChart>
         </ResponsiveContainer>
-      </div>
-
-      {/* Tabla de señales */}
-      <div className="rounded-2xl shadow bg-white p-4">
-        <h2 className="text-xl font-semibold mb-2">Señales recientes</h2>
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b">
-              <th className="text-left p-2">Fecha</th>
-              <th className="text-left p-2">Precio</th>
-              <th className="text-left p-2">Probabilidad ↑</th>
-              <th className="text-left p-2">Señal IA</th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.map((row, i) => (
-              <tr key={i} className="border-b">
-                <td className="p-2">{row.date}</td>
-                <td className="p-2">${row.price}</td>
-                <td className="p-2">{(row.proba * 100).toFixed(1)}%</td>
-                <td className="p-2 font-bold">
-                  {row.signal === "BUY" && (
-                    <span className="text-green-600">BUY 🚀</span>
-                  )}
-                  {row.signal === "SELL" && (
-                    <span className="text-red-600">SELL 📉</span>
-                  )}
-                  {row.signal === "HOLD" && (
-                    <span className="text-gray-600">HOLD ⚖️</span>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      {/* CTA monetización */}
-      <div className="text-center mt-6">
-        <button className="px-6 py-2 text-lg bg-blue-600 text-white rounded-2xl shadow hover:bg-blue-700 transition">
-          🔒 Accede al Plan Premium
-        </button>
-        <p className="text-gray-500 text-sm mt-2">
-          Desbloquea señales avanzadas y análisis en tiempo real
-        </p>
       </div>
     </div>
   );
 }
+
