@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import {
-  LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer
+  LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine
 } from "recharts";
 
 // 📌 Función para calcular RSI
@@ -161,7 +161,7 @@ export default function Home() {
         </ul>
       </div>
 
-      {/* Gráfico */}
+      {/* Gráfico de precio */}
       {data.length > 0 && (
         <ResponsiveContainer width="100%" height={400}>
           <LineChart data={data}>
@@ -172,6 +172,30 @@ export default function Home() {
           </LineChart>
         </ResponsiveContainer>
       )}
+
+      {/* Gráfico RSI */}
+      {data.length > 0 && signal && (
+        <div className="mt-6">
+          <h2 className="text-lg font-bold mb-2">📈 RSI (Relative Strength Index)</h2>
+          <ResponsiveContainer width="100%" height={200}>
+            <LineChart data={data.map((d, i, arr) => {
+              if (i < 14) return { date: d.date, rsi: null };
+              return {
+                date: d.date,
+                rsi: calculateRSI(arr.slice(i - 14, i + 1))
+              };
+            })}>
+              <XAxis dataKey="date" hide />
+              <YAxis domain={[0, 100]} />
+              <Tooltip />
+              <ReferenceLine y={70} stroke="red" strokeDasharray="3 3" />
+              <ReferenceLine y={30} stroke="green" strokeDasharray="3 3" />
+              <Line type="monotone" dataKey="rsi" stroke="#ffaa00" strokeWidth={2} dot={false} />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      )}
     </div>
   );
 }
+
