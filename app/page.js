@@ -42,15 +42,28 @@ export default function Home() {
         );
         const result = await res.json();
 
-        const formatted = result.prices.map(p => ({
-          date: new Date(p[0]).toLocaleDateString(),
-          price: p[1],
-        }));
+        const formatted = result.prices.map((p, i, arr) => {
+          const date = new Date(p[0]).toLocaleDateString();
+          const price = p[1];
+
+          // Calcular medias móviles acumuladas
+          const ma7 =
+            i >= 6
+              ? arr.slice(i - 6, i + 1).reduce((a, b) => a + b[1], 0) / 7
+              : null;
+
+          const ma30 =
+            i >= 29
+              ? arr.slice(i - 29, i + 1).reduce((a, b) => a + b[1], 0) / 30
+              : null;
+
+          return { date, price, ma7, ma30 };
+        });
 
         setData(formatted);
         setPrice(formatted[formatted.length - 1].price);
 
-        // 📊 Calcular medias móviles
+        // 📊 Calcular medias móviles finales
         const ma7 = formatted.slice(-7).reduce((a, b) => a + b.price, 0) / 7;
         const ma30 = formatted.slice(-30).reduce((a, b) => a + b.price, 0) / 30;
 
@@ -161,14 +174,16 @@ export default function Home() {
         </ul>
       </div>
 
-      {/* Gráfico de precio */}
+      {/* Gráfico de precio con MA7 y MA30 */}
       {data.length > 0 && (
         <ResponsiveContainer width="100%" height={400}>
           <LineChart data={data}>
             <XAxis dataKey="date" hide />
             <YAxis domain={["auto", "auto"]} />
             <Tooltip />
-            <Line type="monotone" dataKey="price" stroke="#00ff88" strokeWidth={2} />
+            <Line type="monotone" dataKey="price" stroke="#00ff88" strokeWidth={2} dot={false} />
+            <Line type="monotone" dataKey="ma7" stroke="#3399ff" strokeWidth={2} dot={false} />
+            <Line type="monotone" dataKey="ma30" stroke="#ff3333" strokeWidth={2} dot={false} />
           </LineChart>
         </ResponsiveContainer>
       )}
@@ -198,4 +213,5 @@ export default function Home() {
     </div>
   );
 }
+
 
