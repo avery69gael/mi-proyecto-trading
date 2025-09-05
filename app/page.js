@@ -37,17 +37,25 @@ export default function Home() {
   const [signal, setSignal] = useState(null);
   const [lastUpdate, setLastUpdate] = useState(null);
 
+  // ⏳ Estados de carga y error
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
   useEffect(() => {
     if (!crypto) return;
     const controller = new AbortController();
 
     async function fetchData() {
       try {
+        setLoading(true);
+        setError(null);
+
         // 📊 1) Precios históricos
         const res = await fetch(
           `https://api.coingecko.com/api/v3/coins/${crypto}/market_chart?vs_currency=usd&days=30&interval=daily`,
           { signal: controller.signal }
         );
+        if (!res.ok) throw new Error("Error al obtener datos históricos");
         const result = await res.json();
 
         const formatted = result.prices.map((p, i, arr) => {
@@ -72,6 +80,7 @@ export default function Home() {
           `https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids=${crypto}`,
           { signal: controller.signal }
         );
+        if (!resExtra.ok) throw new Error("Error al obtener datos de mercado");
         const resultExtra = await resExtra.json();
         const info = resultExtra[0];
         setExtraData({
@@ -85,12 +94,14 @@ export default function Home() {
             "https://api.coingecko.com/api/v3/global",
             { signal: controller.signal }
           );
-          const global = await resGlobal.json();
-          const btcDom = global.data.market_cap_percentage.btc;
-          setExtraData((prev) => ({ ...prev, btcDominance: btcDom }));
+          if (resGlobal.ok) {
+            const global = await resGlobal.json();
+            const btcDom = global.data.market_cap_percentage.btc;
+            setExtraData((prev) => ({ ...prev, btcDominance: btcDom }));
+          }
         }
 
-        // 📈 Indicadores
+        // 📈 Señal IA
         const ma7 = formatted.slice(-7).reduce((a, b) => a + b.price, 0) / 7;
         const ma30 = formatted.slice(-30).reduce((a, b) => a + b.price, 0) / 30;
         const rsi = calculateRSI(formatted.slice(-15));
@@ -108,7 +119,12 @@ export default function Home() {
         setSignal({ recommendation, probability, rsi, ma7, ma30 });
         setLastUpdate(new Date().toLocaleTimeString());
       } catch (err) {
-        if (err.name !== "AbortError") console.error(err);
+        if (err.name !== "AbortError") {
+          console.error(err);
+          setError(err.message || "Error al cargar los datos");
+        }
+      } finally {
+        setLoading(false);
       }
     }
 
@@ -136,96 +152,111 @@ export default function Home() {
         </select>
       </header>
 
-      {/* Grid principal */}
-      <main className="p-6 grid grid-cols-1 md:grid-cols-3 gap-6">
-        {/* Precio */}
-        {price && (
-          <div className="bg-gray-900 rounded-xl shadow-lg p-6">
-            <h2 className="text-lg font-bold">💰 Precio Actual</h2>
-            <p className="text-2xl font-semibold mt-2">${price.toFixed(2)}</p>
-          </div>
-        )}
+      {/* 📌 Loading */}
+      {loading && (
+        <div className="p-6 text-center">
+          <p className="text-lg animate-pulse">⏳ Cargando datos...</p>
+        </div>
+      )}
 
-        {/* Datos de mercado */}
-        {extraData && (
-          <div className="bg-gray-900 rounded-xl shadow-lg p-6">
-            <h2 className="text-lg font-bold">📊 Datos de Mercado</h2>
-            <p className="mt-2">Volumen 24h: ${formatNumber(extraData.volume)}</p>
-            <p>Market Cap: ${formatNumber(extraData.marketCap)}</p>
-            <p>Dominancia BTC: {extraData.btcDominance.toFixed(2)}%</p>
-          </div>
-        )}
+      {/* 📌 Error */}
+      {error && (
+        <div className="p-6 text-center text-red-400">
+          <p>❌ Error: {error}</p>
+        </div>
+      )}
 
-        {/* Señal IA */}
-        {signal && (
-          <div
-            className={`rounded-xl shadow-lg p-6 ${
-              signal.recommendation.includes("Comprar")
-                ? "bg-green-800"
-                : signal.recommendation.includes("Vender")
-                ? "bg-red-800"
-                : "bg-gray-800"
-            }`}
-          >
-            <h2 className="text-lg font-bold">🤖 Señal IA</h2>
-            <p className="mt-2 font-semibold">{signal.recommendation}</p>
-            <p>Probabilidad: {signal.probability}%</p>
-            <p>RSI: {signal.rsi}</p>
-            <p>
-              MA7: {signal.ma7.toFixed(2)} | MA30: {signal.ma30.toFixed(2)}
-            </p>
-            {lastUpdate && (
-              <p className="text-sm mt-2">⏱️ {lastUpdate}</p>
+      {/* 📌 Contenido */}
+      {!loading && !error && (
+        <>
+          {/* Grid principal */}
+          <main className="p-6 grid grid-cols-1 md:grid-cols-3 gap-6">
+            {price && (
+              <div className="bg-gray-900 rounded-xl shadow-lg p-6">
+                <h2 className="text-lg font-bold">💰 Precio Actual</h2>
+                <p className="text-2xl font-semibold mt-2">${price.toFixed(2)}</p>
+              </div>
             )}
-          </div>
-        )}
-      </main>
 
-      {/* Sección de gráficos */}
-      <section className="p-6 grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Gráfico de precio */}
-        {data.length > 0 && (
-          <div className="bg-gray-900 rounded-xl shadow-lg p-6">
-            <h2 className="text-lg font-bold mb-4">📈 Precio + MA</h2>
-            <ResponsiveContainer width="100%" height={300}>
-              <LineChart data={data}>
-                <XAxis dataKey="date" hide />
-                <YAxis domain={["auto", "auto"]} />
-                <Tooltip />
-                <Line type="monotone" dataKey="price" stroke="#00ff88" strokeWidth={2} dot={false} />
-                <Line type="monotone" dataKey="ma7" stroke="#3399ff" strokeWidth={2} dot={false} />
-                <Line type="monotone" dataKey="ma30" stroke="#ff3333" strokeWidth={2} dot={false} />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-        )}
+            {extraData && (
+              <div className="bg-gray-900 rounded-xl shadow-lg p-6">
+                <h2 className="text-lg font-bold">📊 Datos de Mercado</h2>
+                <p className="mt-2">Volumen 24h: ${formatNumber(extraData.volume)}</p>
+                <p>Market Cap: ${formatNumber(extraData.marketCap)}</p>
+                <p>Dominancia BTC: {extraData.btcDominance.toFixed(2)}%</p>
+              </div>
+            )}
 
-        {/* Gráfico RSI */}
-        {data.length > 0 && signal && (
-          <div className="bg-gray-900 rounded-xl shadow-lg p-6">
-            <h2 className="text-lg font-bold mb-4">📉 RSI</h2>
-            <ResponsiveContainer width="100%" height={300}>
-              <LineChart data={data.map((d, i, arr) => {
-                if (i < 14) return { date: d.date, rsi: null };
-                return {
-                  date: d.date,
-                  rsi: calculateRSI(arr.slice(i - 14, i + 1))
-                };
-              })}>
-                <XAxis dataKey="date" hide />
-                <YAxis domain={[0, 100]} />
-                <Tooltip />
-                <ReferenceLine y={70} stroke="red" strokeDasharray="3 3" />
-                <ReferenceLine y={30} stroke="green" strokeDasharray="3 3" />
-                <Line type="monotone" dataKey="rsi" stroke="#ffaa00" strokeWidth={2} dot={false} />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-        )}
-      </section>
+            {signal && (
+              <div
+                className={`rounded-xl shadow-lg p-6 ${
+                  signal.recommendation.includes("Comprar")
+                    ? "bg-green-800"
+                    : signal.recommendation.includes("Vender")
+                    ? "bg-red-800"
+                    : "bg-gray-800"
+                }`}
+              >
+                <h2 className="text-lg font-bold">🤖 Señal IA</h2>
+                <p className="mt-2 font-semibold">{signal.recommendation}</p>
+                <p>Probabilidad: {signal.probability}%</p>
+                <p>RSI: {signal.rsi}</p>
+                <p>
+                  MA7: {signal.ma7.toFixed(2)} | MA30: {signal.ma30.toFixed(2)}
+                </p>
+                {lastUpdate && (
+                  <p className="text-sm mt-2">⏱️ {lastUpdate}</p>
+                )}
+              </div>
+            )}
+          </main>
+
+          {/* Sección de gráficos */}
+          <section className="p-6 grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {data.length > 0 && (
+              <div className="bg-gray-900 rounded-xl shadow-lg p-6">
+                <h2 className="text-lg font-bold mb-4">📈 Precio + MA</h2>
+                <ResponsiveContainer width="100%" height={300}>
+                  <LineChart data={data}>
+                    <XAxis dataKey="date" hide />
+                    <YAxis domain={["auto", "auto"]} />
+                    <Tooltip />
+                    <Line type="monotone" dataKey="price" stroke="#00ff88" strokeWidth={2} dot={false} />
+                    <Line type="monotone" dataKey="ma7" stroke="#3399ff" strokeWidth={2} dot={false} />
+                    <Line type="monotone" dataKey="ma30" stroke="#ff3333" strokeWidth={2} dot={false} />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+
+            {data.length > 0 && signal && (
+              <div className="bg-gray-900 rounded-xl shadow-lg p-6">
+                <h2 className="text-lg font-bold mb-4">📉 RSI</h2>
+                <ResponsiveContainer width="100%" height={300}>
+                  <LineChart data={data.map((d, i, arr) => {
+                    if (i < 14) return { date: d.date, rsi: null };
+                    return {
+                      date: d.date,
+                      rsi: calculateRSI(arr.slice(i - 14, i + 1))
+                    };
+                  })}>
+                    <XAxis dataKey="date" hide />
+                    <YAxis domain={[0, 100]} />
+                    <Tooltip />
+                    <ReferenceLine y={70} stroke="red" strokeDasharray="3 3" />
+                    <ReferenceLine y={30} stroke="green" strokeDasharray="3 3" />
+                    <Line type="monotone" dataKey="rsi" stroke="#ffaa00" strokeWidth={2} dot={false} />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+          </section>
+        </>
+      )}
     </div>
   );
 }
+
 
 
 
