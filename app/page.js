@@ -22,10 +22,20 @@ function calculateRSI(data, period = 14) {
   return rsi.toFixed(2);
 }
 
+// 📌 Formatear números grandes (ej: 1.2M, 3.4B)
+function formatNumber(num) {
+  if (num >= 1e12) return (num / 1e12).toFixed(2) + "T";
+  if (num >= 1e9) return (num / 1e9).toFixed(2) + "B";
+  if (num >= 1e6) return (num / 1e6).toFixed(2) + "M";
+  if (num >= 1e3) return (num / 1e3).toFixed(2) + "K";
+  return num.toFixed(2);
+}
+
 export default function Home() {
   const [crypto, setCrypto] = useState("bitcoin");
   const [data, setData] = useState([]);
   const [price, setPrice] = useState(null);
+  const [extraData, setExtraData] = useState(null);
   const [signal, setSignal] = useState(null);
   const [lastUpdate, setLastUpdate] = useState(null);
 
@@ -36,6 +46,7 @@ export default function Home() {
 
     async function fetchData() {
       try {
+        // 📌 1) Precios históricos (para gráficos e indicadores)
         const res = await fetch(
           `https://api.coingecko.com/api/v3/coins/${crypto}/market_chart?vs_currency=usd&days=30&interval=daily`,
           { signal: controller.signal }
@@ -46,7 +57,7 @@ export default function Home() {
           const date = new Date(p[0]).toLocaleDateString();
           const price = p[1];
 
-          // Calcular medias móviles acumuladas
+          // Calcular medias móviles
           const ma7 =
             i >= 6
               ? arr.slice(i - 6, i + 1).reduce((a, b) => a + b[1], 0) / 7
@@ -62,6 +73,33 @@ export default function Home() {
 
         setData(formatted);
         setPrice(formatted[formatted.length - 1].price);
+
+        // 📌 2) Datos adicionales (market cap, volumen, dominancia BTC)
+        const resExtra = await fetch(
+          `https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids=${crypto}`,
+          { signal: controller.signal }
+        );
+        const resultExtra = await resExtra.json();
+        const info = resultExtra[0];
+        setExtraData({
+          marketCap: info.market_cap,
+          volume: info.total_volume,
+          btcDominance: crypto === "bitcoin" ? 100 : null, // lo calculamos más abajo
+        });
+
+        // Si no es BTC, calcular dominancia con global data
+        if (crypto !== "bitcoin") {
+          const resGlobal = await fetch(
+            "https://api.coingecko.com/api/v3/global",
+            { signal: controller.signal }
+          );
+          const global = await resGlobal.json();
+          const btcDom = global.data.market_cap_percentage.btc;
+          setExtraData((prev) => ({
+            ...prev,
+            btcDominance: btcDom,
+          }));
+        }
 
         // 📊 Calcular medias móviles finales
         const ma7 = formatted.slice(-7).reduce((a, b) => a + b.price, 0) / 7;
@@ -90,10 +128,7 @@ export default function Home() {
       }
     }
 
-    // Llamar a la API al cargar
     fetchData();
-
-    // ⏱️ Actualizar cada 60 segundos
     const interval = setInterval(fetchData, 60000);
 
     return () => {
@@ -124,7 +159,17 @@ export default function Home() {
         </div>
       )}
 
-      {/* Señal IA con colores dinámicos */}
+      {/* 📊 Extra Data */}
+      {extraData && (
+        <div className="p-4 bg-gray-800 rounded mb-4">
+          <h2 className="text-xl mb-2">📊 Datos de Mercado</h2>
+          <p>Volumen 24h: ${formatNumber(extraData.volume)}</p>
+          <p>Market Cap: ${formatNumber(extraData.marketCap)}</p>
+          <p>Dominancia BTC: {extraData.btcDominance.toFixed(2)}%</p>
+        </div>
+      )}
+
+      {/* Señal IA */}
       {signal && (
         <div
           className={`p-4 rounded mb-4 ${
@@ -145,34 +190,6 @@ export default function Home() {
           {lastUpdate && <p className="text-sm mt-2">⏱️ Última actualización: {lastUpdate}</p>}
         </div>
       )}
-
-      {/* Explicación RSI */}
-      <div className="p-4 bg-gray-700 rounded mb-4">
-        <h2 className="text-lg font-bold">ℹ️ ¿Qué es el RSI?</h2>
-        <p className="text-sm mt-2">
-          El <strong>RSI (Relative Strength Index)</strong> es un indicador técnico que mide la fuerza de una tendencia.
-          Su valor va de <strong>0 a 100</strong>:
-        </p>
-        <ul className="list-disc list-inside mt-2 text-sm">
-          <li><strong>RSI &gt; 70</strong> → Sobrecomprado (riesgo de caída)</li>
-          <li><strong>RSI &lt; 30</strong> → Sobrevendido (posible rebote al alza)</li>
-          <li><strong>40 ≤ RSI ≤ 60</strong> → Mercado neutro</li>
-        </ul>
-      </div>
-
-      {/* Explicación Medias Móviles */}
-      <div className="p-4 bg-gray-700 rounded mb-4">
-        <h2 className="text-lg font-bold">ℹ️ ¿Qué son las Medias Móviles (MA)?</h2>
-        <p className="text-sm mt-2">
-          Las <strong>Medias Móviles (MA)</strong> suavizan el precio para identificar tendencias:
-        </p>
-        <ul className="list-disc list-inside mt-2 text-sm">
-          <li><strong>MA7</strong> → Media de los últimos 7 días (tendencia corta)</li>
-          <li><strong>MA30</strong> → Media de los últimos 30 días (tendencia larga)</li>
-          <li>Cuando <strong>MA7 cruza por encima de MA30</strong> → Señal de <span className="text-green-400">compra</span></li>
-          <li>Cuando <strong>MA7 cruza por debajo de MA30</strong> → Señal de <span className="text-red-400">venta</span></li>
-        </ul>
-      </div>
 
       {/* Gráfico de precio con MA7 y MA30 */}
       {data.length > 0 && (
