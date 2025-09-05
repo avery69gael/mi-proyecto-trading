@@ -27,6 +27,7 @@ export default function Home() {
   const [data, setData] = useState([]);
   const [price, setPrice] = useState(null);
   const [signal, setSignal] = useState(null);
+  const [lastUpdate, setLastUpdate] = useState(null);
 
   useEffect(() => {
     if (!crypto) return;
@@ -69,14 +70,23 @@ export default function Home() {
         }
 
         setSignal({ recommendation, probability, rsi, ma7, ma30 });
+        setLastUpdate(new Date().toLocaleTimeString());
 
       } catch (err) {
         if (err.name !== "AbortError") console.error(err);
       }
     }
 
+    // Llamar a la API al cargar
     fetchData();
-    return () => controller.abort();
+
+    // ⏱️ Actualizar cada 60 segundos
+    const interval = setInterval(fetchData, 60000);
+
+    return () => {
+      controller.abort();
+      clearInterval(interval);
+    };
   }, [crypto]);
 
   return (
@@ -101,14 +111,25 @@ export default function Home() {
         </div>
       )}
 
-      {/* Señal IA */}
+      {/* Señal IA con colores dinámicos */}
       {signal && (
-        <div className="p-4 bg-gray-800 rounded mb-4">
+        <div
+          className={`p-4 rounded mb-4 ${
+            signal.recommendation.includes("Comprar")
+              ? "bg-green-700"
+              : signal.recommendation.includes("Vender")
+              ? "bg-red-700"
+              : "bg-gray-700"
+          }`}
+        >
           <h2 className="text-xl">🤖 Señal IA</h2>
-          <p>Recomendación: <span className="font-bold">{signal.recommendation}</span></p>
+          <p>
+            Recomendación: <span className="font-bold">{signal.recommendation}</span>
+          </p>
           <p>Probabilidad de éxito: {signal.probability}%</p>
           <p>RSI: {signal.rsi}</p>
           <p>MA7: {signal.ma7.toFixed(2)} | MA30: {signal.ma30.toFixed(2)}</p>
+          {lastUpdate && <p className="text-sm mt-2">⏱️ Última actualización: {lastUpdate}</p>}
         </div>
       )}
 
@@ -154,4 +175,3 @@ export default function Home() {
     </div>
   );
 }
-
