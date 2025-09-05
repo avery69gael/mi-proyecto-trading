@@ -5,7 +5,7 @@ import {
   LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine
 } from "recharts";
 
-// 📌 Función para calcular RSI
+// 📌 Calcular RSI
 function calculateRSI(data, period = 14) {
   let gains = 0, losses = 0;
   for (let i = 1; i <= period; i++) {
@@ -20,7 +20,7 @@ function calculateRSI(data, period = 14) {
   return rsi.toFixed(2);
 }
 
-// 📌 Formatear números grandes (ej: 1.2M, 3.4B)
+// 📌 Formatear números
 function formatNumber(num) {
   if (num >= 1e12) return (num / 1e12).toFixed(2) + "T";
   if (num >= 1e9) return (num / 1e9).toFixed(2) + "B";
@@ -37,7 +37,6 @@ export default function Home() {
   const [signal, setSignal] = useState(null);
   const [lastUpdate, setLastUpdate] = useState(null);
 
-  // ⏳ Estados de carga y error
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -50,7 +49,7 @@ export default function Home() {
         setLoading(true);
         setError(null);
 
-        // 📊 1) Precios históricos
+        // 📊 Datos históricos
         const res = await fetch(
           `https://api.coingecko.com/api/v3/coins/${crypto}/market_chart?vs_currency=usd&days=30&interval=daily`,
           { signal: controller.signal }
@@ -75,7 +74,7 @@ export default function Home() {
         setData(formatted);
         setPrice(formatted[formatted.length - 1].price);
 
-        // 📊 2) Datos adicionales
+        // 📊 Datos extra
         const resExtra = await fetch(
           `https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids=${crypto}`,
           { signal: controller.signal }
@@ -120,7 +119,6 @@ export default function Home() {
         setLastUpdate(new Date().toLocaleTimeString());
       } catch (err) {
         if (err.name !== "AbortError") {
-          console.error(err);
           setError(err.message || "Error al cargar los datos");
         }
       } finally {
@@ -137,12 +135,14 @@ export default function Home() {
   }, [crypto]);
 
   return (
-    <div className="min-h-screen bg-gray-950 text-white">
-      {/* Navbar */}
-      <header className="bg-gray-900 shadow-lg p-4 flex justify-between items-center">
-        <h1 className="text-2xl font-bold">🚀 Trading AI Dashboard</h1>
+    <div className="min-h-screen bg-gradient-to-br from-gray-950 via-gray-900 to-black text-white">
+      {/* Navbar con degradado */}
+      <header className="bg-gradient-to-r from-indigo-700 via-purple-700 to-pink-600 shadow-lg p-4 flex flex-col md:flex-row md:justify-between md:items-center gap-3 transition-all duration-500">
+        <h1 className="text-xl md:text-2xl font-bold text-center md:text-left drop-shadow-lg">
+          🚀 Trading AI Dashboard
+        </h1>
         <select
-          className="bg-gray-800 p-2 rounded"
+          className="bg-gray-900/70 backdrop-blur-md p-2 rounded w-full md:w-auto border border-gray-700 hover:scale-105 transition-all duration-300"
           onChange={(e) => setCrypto(e.target.value)}
         >
           <option value="bitcoin">Bitcoin (BTC)</option>
@@ -152,34 +152,35 @@ export default function Home() {
         </select>
       </header>
 
-      {/* 📌 Loading */}
+      {/* Loading */}
       {loading && (
-        <div className="p-6 text-center">
-          <p className="text-lg animate-pulse">⏳ Cargando datos...</p>
+        <div className="p-6 text-center animate-pulse">
+          <p className="text-lg">⏳ Cargando datos...</p>
         </div>
       )}
 
-      {/* 📌 Error */}
+      {/* Error */}
       {error && (
-        <div className="p-6 text-center text-red-400">
+        <div className="p-6 text-center text-red-400 animate-bounce">
           <p>❌ Error: {error}</p>
         </div>
       )}
 
-      {/* 📌 Contenido */}
+      {/* Contenido */}
       {!loading && !error && (
         <>
-          {/* Grid principal */}
           <main className="p-6 grid grid-cols-1 md:grid-cols-3 gap-6">
+            {/* Tarjeta Precio */}
             {price && (
-              <div className="bg-gray-900 rounded-xl shadow-lg p-6">
+              <div className="bg-gradient-to-br from-green-900/70 to-green-700/50 rounded-xl shadow-lg p-6 transform hover:scale-105 transition-all duration-300">
                 <h2 className="text-lg font-bold">💰 Precio Actual</h2>
                 <p className="text-2xl font-semibold mt-2">${price.toFixed(2)}</p>
               </div>
             )}
 
+            {/* Tarjeta Mercado */}
             {extraData && (
-              <div className="bg-gray-900 rounded-xl shadow-lg p-6">
+              <div className="bg-gradient-to-br from-blue-900/70 to-blue-700/50 rounded-xl shadow-lg p-6 transform hover:scale-105 transition-all duration-300">
                 <h2 className="text-lg font-bold">📊 Datos de Mercado</h2>
                 <p className="mt-2">Volumen 24h: ${formatNumber(extraData.volume)}</p>
                 <p>Market Cap: ${formatNumber(extraData.marketCap)}</p>
@@ -187,14 +188,15 @@ export default function Home() {
               </div>
             )}
 
+            {/* Tarjeta Señal IA */}
             {signal && (
               <div
-                className={`rounded-xl shadow-lg p-6 ${
+                className={`rounded-xl shadow-lg p-6 transform hover:scale-105 transition-all duration-300 ${
                   signal.recommendation.includes("Comprar")
-                    ? "bg-green-800"
+                    ? "bg-gradient-to-br from-green-700 via-green-800 to-green-900"
                     : signal.recommendation.includes("Vender")
-                    ? "bg-red-800"
-                    : "bg-gray-800"
+                    ? "bg-gradient-to-br from-red-700 via-red-800 to-red-900"
+                    : "bg-gradient-to-br from-gray-700 via-gray-800 to-gray-900"
                 }`}
               >
                 <h2 className="text-lg font-bold">🤖 Señal IA</h2>
@@ -211,10 +213,11 @@ export default function Home() {
             )}
           </main>
 
-          {/* Sección de gráficos */}
+          {/* Gráficos */}
           <section className="p-6 grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Precio + MA */}
             {data.length > 0 && (
-              <div className="bg-gray-900 rounded-xl shadow-lg p-6">
+              <div className="bg-gray-900/80 rounded-xl shadow-lg p-6 hover:shadow-2xl transition-all duration-500">
                 <h2 className="text-lg font-bold mb-4">📈 Precio + MA</h2>
                 <ResponsiveContainer width="100%" height={300}>
                   <LineChart data={data}>
@@ -229,17 +232,20 @@ export default function Home() {
               </div>
             )}
 
+            {/* RSI */}
             {data.length > 0 && signal && (
-              <div className="bg-gray-900 rounded-xl shadow-lg p-6">
+              <div className="bg-gray-900/80 rounded-xl shadow-lg p-6 hover:shadow-2xl transition-all duration-500">
                 <h2 className="text-lg font-bold mb-4">📉 RSI</h2>
                 <ResponsiveContainer width="100%" height={300}>
-                  <LineChart data={data.map((d, i, arr) => {
-                    if (i < 14) return { date: d.date, rsi: null };
-                    return {
-                      date: d.date,
-                      rsi: calculateRSI(arr.slice(i - 14, i + 1))
-                    };
-                  })}>
+                  <LineChart
+                    data={data.map((d, i, arr) => {
+                      if (i < 14) return { date: d.date, rsi: null };
+                      return {
+                        date: d.date,
+                        rsi: calculateRSI(arr.slice(i - 14, i + 1))
+                      };
+                    })}
+                  >
                     <XAxis dataKey="date" hide />
                     <YAxis domain={[0, 100]} />
                     <Tooltip />
@@ -256,6 +262,8 @@ export default function Home() {
     </div>
   );
 }
+
+
 
 
 
