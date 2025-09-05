@@ -2,164 +2,156 @@
 
 import { useState, useEffect } from "react";
 import {
-  LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer, Legend
+  LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer
 } from "recharts";
 
-export default function Dashboard() {
-  const [coin, setCoin] = useState("bitcoin");
-  const [price, setPrice] = useState(null);
-  const [prevPrice, setPrevPrice] = useState(null);
-  const [history, setHistory] = useState([]);
-  const [signal, setSignal] = useState("");
-  const [loading, setLoading] = useState(false);
+// 📌 Función para calcular RSI
+function calculateRSI(data, period = 14) {
+  let gains = 0, losses = 0;
 
-  // 🔹 Calcular media móvil
-  const movingAverage = (data, windowSize) => {
-    return data.map((_, i) => {
-      if (i < windowSize - 1) return { ...data[i], [`ma${windowSize}`]: null };
-      const slice = data.slice(i - windowSize + 1, i + 1);
-      const avg = slice.reduce((sum, item) => sum + item.price, 0) / windowSize;
-      return { ...data[i], [`ma${windowSize}`]: avg };
-    });
-  };
+  for (let i = 1; i <= period; i++) {
+    let change = data[i].price - data[i - 1].price;
+    if (change > 0) gains += change;
+    else losses -= change;
+  }
+
+  let avgGain = gains / period;
+  let avgLoss = losses / period;
+  let rs = avgLoss === 0 ? 100 : avgGain / avgLoss;
+  let rsi = 100 - (100 / (1 + rs));
+  return rsi.toFixed(2);
+}
+
+export default function Home() {
+  const [crypto, setCrypto] = useState("bitcoin");
+  const [data, setData] = useState([]);
+  const [price, setPrice] = useState(null);
+  const [signal, setSignal] = useState(null);
 
   useEffect(() => {
+    if (!crypto) return;
+
     const controller = new AbortController();
 
-    const fetchData = async () => {
+    async function fetchData() {
       try {
-        setLoading(true);
-        setPrevPrice(price);
-        setPrice(null);
-        setHistory([]);
-        setSignal("");
-
-        // Precio actual
-        const resPrice = await fetch(
-          `https://api.coingecko.com/api/v3/simple/price?ids=${coin}&vs_currencies=usd`,
-          { cache: "no-store", signal: controller.signal }
+        const res = await fetch(
+          `https://api.coingecko.com/api/v3/coins/${crypto}/market_chart?vs_currency=usd&days=30&interval=daily`,
+          { signal: controller.signal }
         );
-        const jsonPrice = await resPrice.json();
-        setPrice(jsonPrice[coin]?.usd || null);
+        const result = await res.json();
 
-        // Histórico
-        const resHistory = await fetch(
-          `https://api.coingecko.com/api/v3/coins/${coin}/market_chart?vs_currency=usd&days=30`,
-          { cache: "no-store", signal: controller.signal }
-        );
-        const jsonHistory = await resHistory.json();
+        const formatted = result.prices.map(p => ({
+          date: new Date(p[0]).toLocaleDateString(),
+          price: p[1],
+        }));
 
-        const formatted = jsonHistory.prices.map(([timestamp, p]) => {
-          const date = new Date(timestamp);
-          return { date: `${date.getDate()}/${date.getMonth() + 1}`, price: p };
-        });
+        setData(formatted);
+        setPrice(formatted[formatted.length - 1].price);
 
-        // Medias móviles
-        let withMA7 = movingAverage(formatted, 7);
-        let withMA30 = movingAverage(withMA7, 30);
+        // 📊 Calcular medias móviles
+        const ma7 = formatted.slice(-7).reduce((a, b) => a + b.price, 0) / 7;
+        const ma30 = formatted.slice(-30).reduce((a, b) => a + b.price, 0) / 30;
 
-        setHistory(withMA30);
+        // 📊 Calcular RSI
+        const rsi = calculateRSI(formatted.slice(-15));
 
-        // Señal
-        const last = withMA30[withMA30.length - 1];
-        if (last?.ma7 && last?.ma30) {
-          setSignal(last.ma7 > last.ma30 ? "📈 Tendencia alcista" : "📉 Tendencia bajista");
+        // 📈 Generar señal IA
+        let recommendation = "Mantener ⚖️";
+        let probability = 55;
+
+        if (ma7 > ma30 && rsi < 70) {
+          recommendation = "Comprar ✅";
+          probability = rsi < 60 ? 75 : 65;
+        } else if (ma7 < ma30 && rsi > 30) {
+          recommendation = "Vender 🚨";
+          probability = rsi > 50 ? 72 : 65;
         }
+
+        setSignal({ recommendation, probability, rsi, ma7, ma30 });
+
       } catch (err) {
-        if (err.name !== "AbortError") console.error("Error cargando datos:", err);
-      } finally {
-        setLoading(false);
+        if (err.name !== "AbortError") console.error(err);
       }
-    };
+    }
 
     fetchData();
     return () => controller.abort();
-  }, [coin]);
+  }, [crypto]);
 
   return (
-    <div className="min-h-screen bg-gray-100 p-8">
-      <h1 className="text-4xl font-extrabold text-center mb-10 text-blue-700 tracking-tight">
-        🚀 Dashboard IA Trading
-      </h1>
+    <div className="min-h-screen bg-gray-900 text-white p-6">
+      <h1 className="text-3xl font-bold mb-4">📊 Dashboard Trading AI</h1>
 
-      {/* Layout en tarjetas */}
-      <div className="max-w-6xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-8">
-        
-        {/* Tarjeta de Precio */}
-        <div className="bg-white p-6 rounded-2xl shadow-lg flex flex-col justify-between">
-          <h2 className="text-xl font-bold capitalize mb-2">{coin}</h2>
-          <div
-            className={`px-4 py-3 rounded-lg text-2xl font-semibold shadow-sm text-center ${
-              price && prevPrice
-                ? price > prevPrice
-                  ? "bg-green-100 text-green-700"
-                  : "bg-red-100 text-red-700"
-                : "bg-gray-100 text-gray-700"
-            }`}
-          >
-            {loading
-              ? "⏳"
-              : price
-              ? `$${price.toLocaleString()}`
-              : "Sin datos"}
-          </div>
-          <select
-            className="mt-4 border rounded-lg px-4 py-2 shadow-sm focus:ring-2 focus:ring-blue-400"
-            value={coin}
-            onChange={(e) => setCoin(e.target.value)}
-          >
-            <option value="bitcoin">Bitcoin (BTC)</option>
-            <option value="ethereum">Ethereum (ETH)</option>
-            <option value="solana">Solana (SOL)</option>
-            <option value="dogecoin">Dogecoin (DOGE)</option>
-          </select>
-        </div>
+      {/* Selector de cripto */}
+      <select
+        className="bg-gray-800 p-2 rounded mb-4"
+        onChange={(e) => setCrypto(e.target.value)}
+      >
+        <option value="bitcoin">Bitcoin (BTC)</option>
+        <option value="ethereum">Ethereum (ETH)</option>
+        <option value="solana">Solana (SOL)</option>
+        <option value="dogecoin">Dogecoin (DOGE)</option>
+      </select>
 
-        {/* Tarjeta de Señal */}
-        <div className="bg-white p-6 rounded-2xl shadow-lg flex flex-col items-center justify-center">
-          <h2 className="text-xl font-bold mb-4">Señal de Trading</h2>
-          {loading ? (
-            <div className="flex justify-center items-center">
-              <div className="animate-spin h-8 w-8 border-4 border-blue-500 border-t-transparent rounded-full"></div>
-            </div>
-          ) : signal ? (
-            signal.includes("alcista") ? (
-              <span className="text-green-600 text-2xl font-semibold">{signal}</span>
-            ) : (
-              <span className="text-red-600 text-2xl font-semibold">{signal}</span>
-            )
-          ) : (
-            <span className="text-gray-500">Sin datos</span>
-          )}
+      {/* Precio actual */}
+      {price && (
+        <div className="p-4 bg-gray-800 rounded mb-4">
+          <h2 className="text-xl">💰 Precio actual: ${price.toFixed(2)}</h2>
         </div>
+      )}
 
-        {/* Tarjeta de Gráfico */}
-        <div className="bg-white p-6 rounded-2xl shadow-lg col-span-1 md:col-span-3">
-          <h2 className="text-xl font-bold mb-4">Gráfico de {coin}</h2>
-          <div className="w-full h-96">
-            {loading ? (
-              <div className="flex justify-center items-center h-full">
-                <div className="animate-spin h-12 w-12 border-4 border-blue-500 border-t-transparent rounded-full"></div>
-              </div>
-            ) : history.length > 0 ? (
-              <ResponsiveContainer>
-                <LineChart data={history}>
-                  <CartesianGrid stroke="#eee" />
-                  <XAxis dataKey="date" />
-                  <YAxis domain={["auto", "auto"]} />
-                  <Tooltip />
-                  <Legend />
-                  <Line type="monotone" dataKey="price" stroke="#2563eb" strokeWidth={2} name="Precio" />
-                  <Line type="monotone" dataKey="ma7" stroke="#16a34a" strokeWidth={2} dot={false} name="MA7" />
-                  <Line type="monotone" dataKey="ma30" stroke="#dc2626" strokeWidth={2} dot={false} name="MA30" />
-                </LineChart>
-              </ResponsiveContainer>
-            ) : (
-              <p className="text-center text-gray-500 mt-20">No hay datos para mostrar</p>
-            )}
-          </div>
+      {/* Señal IA */}
+      {signal && (
+        <div className="p-4 bg-gray-800 rounded mb-4">
+          <h2 className="text-xl">🤖 Señal IA</h2>
+          <p>Recomendación: <span className="font-bold">{signal.recommendation}</span></p>
+          <p>Probabilidad de éxito: {signal.probability}%</p>
+          <p>RSI: {signal.rsi}</p>
+          <p>MA7: {signal.ma7.toFixed(2)} | MA30: {signal.ma30.toFixed(2)}</p>
         </div>
+      )}
+
+      {/* Explicación RSI */}
+      <div className="p-4 bg-gray-700 rounded mb-4">
+        <h2 className="text-lg font-bold">ℹ️ ¿Qué es el RSI?</h2>
+        <p className="text-sm mt-2">
+          El <strong>RSI (Relative Strength Index)</strong> es un indicador técnico que mide la fuerza de una tendencia.
+          Su valor va de <strong>0 a 100</strong>:
+        </p>
+        <ul className="list-disc list-inside mt-2 text-sm">
+          <li><strong>RSI &gt; 70</strong> → Sobrecomprado (riesgo de caída)</li>
+          <li><strong>RSI &lt; 30</strong> → Sobrevendido (posible rebote al alza)</li>
+          <li><strong>40 ≤ RSI ≤ 60</strong> → Mercado neutro</li>
+        </ul>
       </div>
+
+      {/* Explicación Medias Móviles */}
+      <div className="p-4 bg-gray-700 rounded mb-4">
+        <h2 className="text-lg font-bold">ℹ️ ¿Qué son las Medias Móviles (MA)?</h2>
+        <p className="text-sm mt-2">
+          Las <strong>Medias Móviles (MA)</strong> suavizan el precio para identificar tendencias:
+        </p>
+        <ul className="list-disc list-inside mt-2 text-sm">
+          <li><strong>MA7</strong> → Media de los últimos 7 días (tendencia corta)</li>
+          <li><strong>MA30</strong> → Media de los últimos 30 días (tendencia larga)</li>
+          <li>Cuando <strong>MA7 cruza por encima de MA30</strong> → Señal de <span className="text-green-400">compra</span></li>
+          <li>Cuando <strong>MA7 cruza por debajo de MA30</strong> → Señal de <span className="text-red-400">venta</span></li>
+        </ul>
+      </div>
+
+      {/* Gráfico */}
+      {data.length > 0 && (
+        <ResponsiveContainer width="100%" height={400}>
+          <LineChart data={data}>
+            <XAxis dataKey="date" hide />
+            <YAxis domain={["auto", "auto"]} />
+            <Tooltip />
+            <Line type="monotone" dataKey="price" stroke="#00ff88" strokeWidth={2} />
+          </LineChart>
+        </ResponsiveContainer>
+      )}
     </div>
   );
 }
+
