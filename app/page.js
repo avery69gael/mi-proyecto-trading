@@ -8,25 +8,26 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-  ReferenceLine,
 } from "recharts";
-import toast, { Toaster } from "react-hot-toast";
 
 export default function Home() {
-  const [data, setData] = useState([]);
   const [crypto, setCrypto] = useState("bitcoin");
+  const [data, setData] = useState([]);
   const [price, setPrice] = useState(null);
   const [extraData, setExtraData] = useState({});
   const [signal, setSignal] = useState(null);
+  const [history, setHistory] = useState([]); // 📜 historial de señales
   const [loading, setLoading] = useState(true);
   const [lastUpdate, setLastUpdate] = useState(null);
+  const [error, setError] = useState(null);
 
   // RSI
-  function calculateRSI(data, period = 14) {
+  function calculateRSI(prices, period = 14) {
+    if (prices.length < period) return 50;
     let gains = 0,
       losses = 0;
     for (let i = 1; i < period; i++) {
-      const diff = data[i].price - data[i - 1].price;
+      const diff = prices[i].price - prices[i - 1].price;
       if (diff >= 0) gains += diff;
       else losses -= diff;
     }
@@ -36,19 +37,20 @@ export default function Home() {
     return 100 - 100 / (1 + rs);
   }
 
+  // Fetch datos
   useEffect(() => {
-    let controller = new AbortController();
+    const controller = new AbortController();
 
     async function fetchData() {
       try {
         setLoading(true);
+        setError(null);
 
-        // 1) Precios históricos
+        // 1) Históricos
         const res = await fetch(
           `https://api.coingecko.com/api/v3/coins/${crypto}/market_chart?vs_currency=usd&days=30&interval=daily`,
           { signal: controller.signal }
         );
-
         if (!res.ok) throw new Error("Error precios históricos");
         const result = await res.json();
 
@@ -84,8 +86,7 @@ export default function Home() {
 
         // 3) Señal IA
         if (formatted.length >= 30) {
-          const ma7 =
-            formatted.slice(-7).reduce((a, b) => a + b.price, 0) / 7;
+          const ma7 = formatted.slice(-7).reduce((a, b) => a + b.price, 0) / 7;
           const ma30 =
             formatted.slice(-30).reduce((a, b) => a + b.price, 0) / 30;
           const rsi = calculateRSI(formatted.slice(-15));
@@ -100,18 +101,24 @@ export default function Home() {
             probability = rsi > 50 ? 72 : 65;
           }
 
-          setSignal({ recommendation, probability, rsi, ma7, ma30 });
+          const newSignal = {
+            time: new Date().toLocaleTimeString(),
+            recommendation,
+            probability,
+            rsi,
+            ma7,
+            ma30,
+          };
+
+          setSignal(newSignal);
+          setHistory((prev) => [newSignal, ...prev].slice(0, 10)); // solo últimas 10
         }
 
         setLastUpdate(new Date().toLocaleTimeString());
       } catch (err) {
         if (err.name !== "AbortError") {
           console.warn("⚠️ Error detectado:", err.message);
-
-          // Notificación toast
-          toast.error("API saturada, reintentando en 2s...");
-
-          // Retry en 2s
+          setError("⚠️ API saturada, reintentando...");
           setTimeout(() => {
             fetchData();
           }, 2000);
@@ -125,87 +132,132 @@ export default function Home() {
     return () => controller.abort();
   }, [crypto]);
 
+  function formatNumber(num) {
+    if (!num) return "-";
+    if (num >= 1e9) return (num / 1e9).toFixed(2) + "B";
+    if (num >= 1e6) return (num / 1e6).toFixed(2) + "M";
+    if (num >= 1e3) return (num / 1e3).toFixed(2) + "K";
+    return num.toFixed(2);
+  }
+
   return (
-    <main className="min-h-screen bg-gradient-to-br from-gray-900 via-black to-gray-800 text-white">
-      {/* Toast container */}
-      <Toaster position="bottom-right" />
+    <main className="min-h-screen bg-gradient-to-br from-gray-900 via-black to-gray-800 text-white p-6">
+      <h1 className="text-3xl font-bold mb-4">📈 Crypto Dashboard</h1>
 
-      {/* Navbar */}
-      <header className="bg-gray-900 shadow-lg p-4 flex flex-col md:flex-row md:justify-between md:items-center gap-3 transition-all">
-        <h1 className="text-xl md:text-2xl font-bold text-center md:text-left">
-          🚀 Trading AI Dashboard
-        </h1>
-        <select
-          className="bg-gray-800 p-2 rounded w-full md:w-auto"
-          onChange={(e) => setCrypto(e.target.value)}
-        >
-          <option value="bitcoin">Bitcoin (BTC)</option>
-          <option value="ethereum">Ethereum (ETH)</option>
-          <option value="solana">Solana (SOL)</option>
-          <option value="dogecoin">Dogecoin (DOGE)</option>
-        </select>
-      </header>
+      {/* Selector */}
+      <select
+        className="p-2 rounded-lg text-black"
+        value={crypto}
+        onChange={(e) => setCrypto(e.target.value)}
+      >
+        <option value="bitcoin">Bitcoin</option>
+        <option value="ethereum">Ethereum</option>
+        <option value="dogecoin">Dogecoin</option>
+        <option value="cardano">Cardano</option>
+      </select>
 
-      <section className="p-6 grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* Precio */}
-        <div className="bg-gray-800 p-4 rounded-2xl shadow-lg">
-          <h2 className="text-lg font-semibold mb-2">💰 Precio actual</h2>
-          {loading ? (
-            <div className="flex justify-center items-center h-20">
-              <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-white"></div>
-            </div>
-          ) : price ? (
-            <p className="text-2xl font-bold">${price.toFixed(2)}</p>
-          ) : (
-            <p>Sin datos</p>
-          )}
+      {/* Precio */}
+      <div className="mt-4 bg-gray-800 p-4 rounded-2xl shadow-lg">
+        <h2 className="text-xl font-semibold">💰 Precio actual</h2>
+        <p className="text-2xl">
+          {price ? `$${price.toFixed(2)}` : "Cargando..."}
+        </p>
+        <p className="text-sm text-gray-400">Última actualización: {lastUpdate}</p>
+      </div>
+
+      {/* Extra Data */}
+      <div className="mt-4 bg-gray-800 p-4 rounded-2xl shadow-lg grid grid-cols-2 gap-4">
+        <div>
+          <h3 className="text-lg">📊 Volumen 24h</h3>
+          <p>{formatNumber(extraData.volume)} USD</p>
         </div>
-
-        {/* Datos extra */}
-        <div className="bg-gray-800 p-4 rounded-2xl shadow-lg">
-          <h2 className="text-lg font-semibold mb-2">📊 Datos de mercado</h2>
-          {loading ? (
-            <div className="flex justify-center items-center h-20">
-              <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-white"></div>
-            </div>
-          ) : extraData.marketCap ? (
-            <ul>
-              <li>Market Cap: ${extraData.marketCap.toLocaleString()}</li>
-              <li>Volumen 24h: ${extraData.volume.toLocaleString()}</li>
-            </ul>
-          ) : (
-            <p>Sin datos</p>
-          )}
+        <div>
+          <h3 className="text-lg">🏦 Market Cap</h3>
+          <p>{formatNumber(extraData.marketCap)} USD</p>
         </div>
+      </div>
 
-        {/* Señal IA */}
-        <div className="bg-gray-800 p-4 rounded-2xl shadow-lg col-span-1 md:col-span-2">
-          <h2 className="text-lg font-semibold mb-2">🤖 Señal IA</h2>
-          {loading ? (
-            <p>Cargando...</p>
-          ) : signal ? (
-            <div>
-              <p
-                className={`text-xl font-bold ${
-                  signal.recommendation.includes("Comprar")
-                    ? "text-green-400"
-                    : signal.recommendation.includes("Vender")
-                    ? "text-red-400"
-                    : "text-yellow-400"
-                }`}
-              >
-                {signal.recommendation} ({signal.probability}% éxito)
-              </p>
-              <p className="text-sm text-gray-400">
-                RSI: {signal.rsi.toFixed(2)} | MA7: {signal.ma7.toFixed(2)} | MA30:{" "}
-                {signal.ma30.toFixed(2)}
-              </p>
-            </div>
+      {/* Señal IA */}
+      {signal && (
+        <div className="mt-4 bg-gray-800 p-4 rounded-2xl shadow-lg">
+          <h2 className="text-xl font-semibold">🤖 Señal IA</h2>
+          <p
+            className={`text-2xl font-bold ${
+              signal.recommendation.includes("Comprar")
+                ? "text-green-400"
+                : signal.recommendation.includes("Vender")
+                ? "text-red-400"
+                : "text-yellow-400"
+            }`}
+          >
+            {signal.recommendation} ({signal.probability}% éxito)
+          </p>
+          <p>RSI: {signal.rsi.toFixed(2)}</p>
+          <p>MA7: {signal.ma7.toFixed(2)} | MA30: {signal.ma30.toFixed(2)}</p>
+        </div>
+      )}
+
+      {/* Historial */}
+      <section className="p-6">
+        <div className="bg-gray-800 p-4 rounded-2xl shadow-lg">
+          <h2 className="text-lg font-semibold mb-2">📜 Historial de Señales IA</h2>
+          {history.length ? (
+            <table className="w-full text-sm text-left border-collapse">
+              <thead>
+                <tr className="text-gray-400 border-b border-gray-700">
+                  <th className="p-2">Hora</th>
+                  <th className="p-2">Recomendación</th>
+                  <th className="p-2">Prob.</th>
+                  <th className="p-2">RSI</th>
+                  <th className="p-2">MA7</th>
+                  <th className="p-2">MA30</th>
+                </tr>
+              </thead>
+              <tbody>
+                {history.map((h, i) => (
+                  <tr key={i} className="border-b border-gray-700">
+                    <td className="p-2">{h.time}</td>
+                    <td
+                      className={`p-2 font-bold ${
+                        h.recommendation.includes("Comprar")
+                          ? "text-green-400"
+                          : h.recommendation.includes("Vender")
+                          ? "text-red-400"
+                          : "text-yellow-400"
+                      }`}
+                    >
+                      {h.recommendation}
+                    </td>
+                    <td className="p-2">{h.probability}%</td>
+                    <td className="p-2">{h.rsi.toFixed(2)}</td>
+                    <td className="p-2">{h.ma7.toFixed(2)}</td>
+                    <td className="p-2">{h.ma30.toFixed(2)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           ) : (
-            <p>Sin datos</p>
+            <p>No hay historial aún...</p>
           )}
         </div>
       </section>
+
+      {/* Gráfico */}
+      <div className="mt-6 bg-gray-800 p-4 rounded-2xl shadow-lg h-80">
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart data={data}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#444" />
+            <XAxis dataKey="date" />
+            <YAxis domain={["auto", "auto"]} />
+            <Tooltip />
+            <Line type="monotone" dataKey="price" stroke="#3b82f6" dot={false} />
+            <Line type="monotone" dataKey="ma7" stroke="#22c55e" dot={false} />
+            <Line type="monotone" dataKey="ma30" stroke="#eab308" dot={false} />
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
+
+      {error && <p className="text-red-400 mt-4">{error}</p>}
     </main>
   );
 }
