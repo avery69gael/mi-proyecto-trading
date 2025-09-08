@@ -5,74 +5,95 @@ import {
   Line,
   XAxis,
   YAxis,
-  CartesianGrid,
   Tooltip,
+  CartesianGrid,
   ResponsiveContainer,
 } from "recharts";
+import { Toaster, toast } from "react-hot-toast";
 
 export default function Home() {
-  const [crypto, setCrypto] = useState("bitcoin");
-  const [data, setData] = useState([]);
-  const [forecast, setForecast] = useState([]); // 📊 predicción
+  const [coin, setCoin] = useState("bitcoin");
   const [price, setPrice] = useState(null);
-  const [extraData, setExtraData] = useState({});
+  const [data, setData] = useState([]);
   const [signal, setSignal] = useState(null);
-  const [history, setHistory] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [lastUpdate, setLastUpdate] = useState(null);
-  const [error, setError] = useState(null);
+  const [forecast, setForecast] = useState([]);
+  const [alerts, setAlerts] = useState([]);
 
-  // RSI
-  function calculateRSI(prices, period = 14) {
-    if (prices.length < period) return 50;
-    let gains = 0,
-      losses = 0;
-    for (let i = 1; i < period; i++) {
-      const diff = prices[i].price - prices[i - 1].price;
-      if (diff >= 0) gains += diff;
-      else losses -= diff;
-    }
-    const avgGain = gains / period;
-    const avgLoss = losses / period || 1;
-    const rs = avgGain / avgLoss;
-    return 100 - 100 / (1 + rs);
-  }
-
-  // Fetch datos
+  // Cargar alertas desde localStorage al iniciar
   useEffect(() => {
-    const controller = new AbortController();
+    const savedAlerts = localStorage.getItem("alerts");
+    if (savedAlerts) {
+      setAlerts(JSON.parse(savedAlerts));
+    }
+  }, []);
 
-    async function fetchData() {
+  // Guardar alertas cada vez que cambian
+  useEffect(() => {
+    localStorage.setItem("alerts", JSON.stringify(alerts));
+  }, [alerts]);
+
+  // Obtener datos de la API
+  useEffect(() => {
+    const fetchData = async () => {
       try {
-        setLoading(true);
-        setError(null);
-
-        // 1) Históricos
-        const res = await fetch(
-          `https://api.coingecko.com/api/v3/coins/${crypto}/market_chart?vs_currency=usd&days=30&interval=daily`,
-          { signal: controller.signal }
+        const resPrice = await fetch(
+          `https://api.coingecko.com/api/v3/simple/price?ids=${coin}&vs_currencies=usd`
         );
-        if (!res.ok) throw new Error("Error precios históricos");
-        const result = await res.json();
+        const priceData = await resPrice.json();
+        setPrice(priceData[coin].usd);
 
-        const formatted = result.prices.map((p, i, arr) => {
-          const date = new Date(p[0]).toLocaleDateString();
-          const price = p[1];
-          const ma7 =
-            i >= 6
-              ? arr.slice(i - 6, i + 1).reduce((a, b) => a + b[1], 0) / 7
-              : null;
-          const ma30 =
-            i >= 29
-              ? arr.slice(i - 29, i + 1).reduce((a, b) => a + b[1], 0) / 30
-              : null;
-          return { date, price, ma7, ma30 };
-        });
+        const resHistory = await fetch(
+          `https://api.coingecko.com/api/v3/coins/${coin}/market_chart?vs_currency=usd&days=30`
+        );
+        const history = await resHistory.json();
 
+        const formatted = history.prices.map((p, i) => ({
+          date: new Date(p[0]).toLocaleDateString(),
+          price: p[1],
+        }));
         setData(formatted);
-        setPrice(formatted.at(-1)?.price ?? null);
 
-        // --- Predicción con regresión lineal ---
+        // Calcular medias móviles
+        const ma = (arr, range) =>
+          arr.map((_, i) => {
+            if (i < range) return null;
+            const slice = arr.slice(i - range, i);
+            return slice.reduce((a, b) => a + b.price, 0) / slice.length;
+          });
+
+        const ma7 = ma(formatted, 7);
+        const ma30 = ma(formatted, 30);
+        const rsi =
+          100 -
+          100 /
+            (1 +
+              (formatted.slice(-14).reduce((acc, val, i, arr) => {
+                if (i === 0) return acc;
+                const diff = val.price - arr[i - 1].price;
+                return acc + (diff > 0 ? diff : 0);
+              }, 0) /
+                formatted
+                  .slice(-14)
+                  .reduce((acc, val, i, arr) => {
+                    if (i === 0) return acc;
+                    const diff = val.price - arr[i - 1].price;
+                    return acc + (diff < 0 ? -diff : 0);
+                  }, 0)));
+
+        let recommendation = "Mantener";
+        let probability = 50;
+
+        if (rsi < 30 && ma7[ma7.length - 1] > ma30[ma30.length - 1]) {
+          recommendation = "Comprar";
+          probability = 75;
+        } else if (rsi > 70 && ma7[ma7.length - 1] < ma30[ma30.length - 1]) {
+          recommendation = "Vender";
+          probability = 75;
+        }
+
+        setSignal({ rsi, ma7: ma7[ma7.length - 1], ma30: ma30[ma30.length - 1], recommendation, probability });
+
+        // Predicción simple con regresión lineal
         if (formatted.length > 0) {
           const prices = formatted.map((p) => p.price);
           const n = prices.length;
@@ -97,227 +118,131 @@ export default function Home() {
 
           setForecast(future);
         }
-
-        // 2) Datos extra
-        const resExtra = await fetch(
-          `https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids=${crypto}`,
-          { signal: controller.signal }
-        );
-        if (!resExtra.ok) throw new Error("Error datos extra");
-        const resultExtra = await resExtra.json();
-        const info = resultExtra[0];
-        setExtraData({
-          marketCap: info.market_cap,
-          volume: info.total_volume,
-        });
-
-        // 3) Señal IA
-        if (formatted.length >= 30) {
-          const ma7 = formatted.slice(-7).reduce((a, b) => a + b.price, 0) / 7;
-          const ma30 =
-            formatted.slice(-30).reduce((a, b) => a + b.price, 0) / 30;
-          const rsi = calculateRSI(formatted.slice(-15));
-
-          let recommendation = "Mantener ⚖️";
-          let probability = 55;
-          if (ma7 > ma30 && rsi < 70) {
-            recommendation = "Comprar ✅";
-            probability = rsi < 60 ? 75 : 65;
-          } else if (ma7 < ma30 && rsi > 30) {
-            recommendation = "Vender 🚨";
-            probability = rsi > 50 ? 72 : 65;
-          }
-
-          const newSignal = {
-            time: new Date().toLocaleTimeString(),
-            recommendation,
-            probability,
-            rsi,
-            ma7,
-            ma30,
-          };
-
-          setSignal(newSignal);
-          setHistory((prev) => [newSignal, ...prev].slice(0, 10));
-        }
-
-        setLastUpdate(new Date().toLocaleTimeString());
-      } catch (err) {
-        if (err.name !== "AbortError") {
-          console.warn("⚠️ Error detectado:", err.message);
-          setError("⚠️ API saturada, reintentando...");
-          setTimeout(() => {
-            fetchData();
-          }, 2000);
-        }
-      } finally {
-        setLoading(false);
+      } catch (error) {
+        console.error("❌ Error al cargar datos:", error);
       }
-    }
+    };
 
     fetchData();
-    return () => controller.abort();
-  }, [crypto]);
+  }, [coin]);
 
-  function formatNumber(num) {
-    if (!num) return "-";
-    if (num >= 1e9) return (num / 1e9).toFixed(2) + "B";
-    if (num >= 1e6) return (num / 1e6).toFixed(2) + "M";
-    if (num >= 1e3) return (num / 1e3).toFixed(2) + "K";
-    return num.toFixed(2);
-  }
+  // Comprobar alertas
+  useEffect(() => {
+    if (!price || !signal) return;
+
+    alerts.forEach((alert) => {
+      let triggered = false;
+
+      if (alert.type === "priceAbove" && price > alert.value) triggered = true;
+      if (alert.type === "priceBelow" && price < alert.value) triggered = true;
+      if (alert.type === "rsiAbove" && signal.rsi > alert.value) triggered = true;
+      if (alert.type === "rsiBelow" && signal.rsi < alert.value) triggered = true;
+
+      if (triggered) {
+        toast(`🚨 Alerta cumplida: ${alert.type} ${alert.value}`);
+      }
+    });
+  }, [price, signal, alerts]);
 
   return (
-    <main className="min-h-screen bg-gradient-to-br from-gray-900 via-black to-gray-800 text-white p-6">
-      <h1 className="text-3xl font-bold mb-4">📈 Crypto Dashboard</h1>
+    <main className="min-h-screen bg-gradient-to-br from-gray-900 via-black to-gray-800 text-white">
+      <Toaster position="top-right" />
 
-      {/* Selector */}
-      <select
-        className="p-2 rounded-lg text-black"
-        value={crypto}
-        onChange={(e) => setCrypto(e.target.value)}
-      >
-        <option value="bitcoin">Bitcoin</option>
-        <option value="ethereum">Ethereum</option>
-        <option value="dogecoin">Dogecoin</option>
-        <option value="cardano">Cardano</option>
-      </select>
+      {/* Navbar */}
+      <header className="p-6 bg-gray-900/80 backdrop-blur-md shadow-lg flex justify-between items-center sticky top-0 z-50">
+        <h1 className="text-2xl font-bold">🚀 CryptoSignals IA</h1>
+        <select
+          className="p-2 rounded bg-gray-800 border border-gray-600"
+          onChange={(e) => setCoin(e.target.value)}
+        >
+          <option value="bitcoin">Bitcoin</option>
+          <option value="ethereum">Ethereum</option>
+          <option value="dogecoin">Dogecoin</option>
+        </select>
+      </header>
 
-      {/* Precio */}
-      <div className="mt-4 bg-gray-800 p-4 rounded-2xl shadow-lg">
-        <h2 className="text-xl font-semibold">💰 Precio actual</h2>
-        <p className="text-2xl">
-          {price ? `$${price.toFixed(2)}` : "Cargando..."}
-        </p>
-        <p className="text-sm text-gray-400">
-          Última actualización: {lastUpdate}
-        </p>
-      </div>
-
-      {/* Extra Data */}
-      <div className="mt-4 bg-gray-800 p-4 rounded-2xl shadow-lg grid grid-cols-2 gap-4">
-        <div>
-          <h3 className="text-lg">📊 Volumen 24h</h3>
-          <p>{formatNumber(extraData.volume)} USD</p>
+      <section className="grid grid-cols-1 lg:grid-cols-2 gap-6 p-6">
+        {/* Precio */}
+        <div className="bg-gray-800 p-6 rounded-2xl shadow-lg">
+          <h2 className="text-xl font-semibold">💰 Precio actual</h2>
+          <p className="text-3xl mt-2">${price ?? "Cargando..."}</p>
         </div>
-        <div>
-          <h3 className="text-lg">🏦 Market Cap</h3>
-          <p>{formatNumber(extraData.marketCap)} USD</p>
-        </div>
-      </div>
 
-      {/* Señal IA */}
-      {signal && (
-        <div className="mt-4 bg-gray-800 p-4 rounded-2xl shadow-lg">
+        {/* Señales IA */}
+        <div className="bg-gray-800 p-6 rounded-2xl shadow-lg">
           <h2 className="text-xl font-semibold">🤖 Señal IA</h2>
-          <p
-            className={`text-2xl font-bold ${
-              signal.recommendation.includes("Comprar")
-                ? "text-green-400"
-                : signal.recommendation.includes("Vender")
-                ? "text-red-400"
-                : "text-yellow-400"
-            }`}
-          >
-            {signal.recommendation} ({signal.probability}% éxito)
-          </p>
-          <p>RSI: {signal.rsi.toFixed(2)}</p>
-          <p>
-            MA7: {signal.ma7.toFixed(2)} | MA30: {signal.ma30.toFixed(2)}
-          </p>
-        </div>
-      )}
-
-      {/* Historial */}
-      <section className="p-6">
-        <div className="bg-gray-800 p-4 rounded-2xl shadow-lg">
-          <h2 className="text-lg font-semibold mb-2">📜 Historial de Señales IA</h2>
-          {history.length ? (
-            <table className="w-full text-sm text-left border-collapse">
-              <thead>
-                <tr className="text-gray-400 border-b border-gray-700">
-                  <th className="p-2">Hora</th>
-                  <th className="p-2">Recomendación</th>
-                  <th className="p-2">Prob.</th>
-                  <th className="p-2">RSI</th>
-                  <th className="p-2">MA7</th>
-                  <th className="p-2">MA30</th>
-                </tr>
-              </thead>
-              <tbody>
-                {history.map((h, i) => (
-                  <tr key={i} className="border-b border-gray-700">
-                    <td className="p-2">{h.time}</td>
-                    <td
-                      className={`p-2 font-bold ${
-                        h.recommendation.includes("Comprar")
-                          ? "text-green-400"
-                          : h.recommendation.includes("Vender")
-                          ? "text-red-400"
-                          : "text-yellow-400"
-                      }`}
-                    >
-                      {h.recommendation}
-                    </td>
-                    <td className="p-2">{h.probability}%</td>
-                    <td className="p-2">{h.rsi.toFixed(2)}</td>
-                    <td className="p-2">{h.ma7.toFixed(2)}</td>
-                    <td className="p-2">{h.ma30.toFixed(2)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          {signal ? (
+            <p
+              className={`text-2xl mt-2 font-bold ${
+                signal.recommendation === "Comprar"
+                  ? "text-green-400"
+                  : signal.recommendation === "Vender"
+                  ? "text-red-400"
+                  : "text-yellow-400"
+              }`}
+            >
+              {signal.recommendation} ({signal.probability}%)
+            </p>
           ) : (
-            <p>No hay historial aún...</p>
+            <p>Cargando...</p>
           )}
         </div>
       </section>
 
-      {/* Gráfico */}
-      <div className="mt-6 bg-gray-800 p-4 rounded-2xl shadow-lg h-80">
-        <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={[...data, ...forecast]}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#444" />
-            <XAxis dataKey="date" />
-            <YAxis domain={["auto", "auto"]} />
-            <Tooltip />
-            <Line
-              type="monotone"
-              dataKey="price"
-              stroke="#3b82f6"
-              dot={false}
-              name="Precio real"
+      {/* Crear alerta */}
+      <section className="p-6">
+        <div className="bg-gray-800 p-4 rounded-2xl shadow-lg">
+          <h2 className="text-lg font-semibold mb-2">⚡ Crear alerta</h2>
+          <div className="flex gap-2">
+            <select id="type" className="p-2 rounded bg-gray-700 text-white">
+              <option value="priceAbove">Precio &gt; X</option>
+              <option value="priceBelow">Precio &lt; X</option>
+              <option value="rsiAbove">RSI &gt; X</option>
+              <option value="rsiBelow">RSI &lt; X</option>
+            </select>
+            <input
+              type="number"
+              id="value"
+              placeholder="Valor"
+              className="p-2 rounded bg-gray-700 text-white"
             />
-            <Line
-              type="monotone"
-              dataKey="ma7"
-              stroke="#22c55e"
-              dot={false}
-              name="MA7"
-            />
-            <Line
-              type="monotone"
-              dataKey="ma30"
-              stroke="#eab308"
-              dot={false}
-              name="MA30"
-            />
-            <Line
-              type="monotone"
-              dataKey="forecast"
-              stroke="#f97316"
-              dot={false}
-              strokeDasharray="5 5"
-              name="Predicción"
-            />
-          </LineChart>
-        </ResponsiveContainer>
-      </div>
+            <button
+              onClick={() => {
+                const type = document.getElementById("type").value;
+                const value = parseFloat(document.getElementById("value").value);
+                if (!isNaN(value)) {
+                  setAlerts([...alerts, { type, value }]);
+                  toast.success("✅ Alerta añadida");
+                }
+              }}
+              className="bg-blue-500 hover:bg-blue-600 px-3 py-2 rounded"
+            >
+              Añadir
+            </button>
+          </div>
+        </div>
+      </section>
 
-      {error && <p className="text-red-400 mt-4">{error}</p>}
+      {/* Gráfico */}
+      <section className="p-6">
+        <div className="bg-gray-800 p-4 rounded-2xl shadow-lg">
+          <h2 className="text-lg font-semibold mb-2">📈 Gráfico de precios</h2>
+          <ResponsiveContainer width="100%" height={400}>
+            <LineChart data={[...data, ...forecast]}>
+              <XAxis dataKey="date" />
+              <YAxis />
+              <Tooltip />
+              <CartesianGrid strokeDasharray="3 3" stroke="#444" />
+              <Line type="monotone" dataKey="price" stroke="#3b82f6" dot={false} name="Precio real" />
+              <Line type="monotone" dataKey="forecast" stroke="#f97316" dot={false} strokeDasharray="5 5" name="Predicción" />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      </section>
     </main>
   );
 }
+
 
 
 
