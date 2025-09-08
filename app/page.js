@@ -13,10 +13,11 @@ import {
 export default function Home() {
   const [crypto, setCrypto] = useState("bitcoin");
   const [data, setData] = useState([]);
+  const [forecast, setForecast] = useState([]); // 📊 predicción
   const [price, setPrice] = useState(null);
   const [extraData, setExtraData] = useState({});
   const [signal, setSignal] = useState(null);
-  const [history, setHistory] = useState([]); // 📜 historial de señales
+  const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(true);
   const [lastUpdate, setLastUpdate] = useState(null);
   const [error, setError] = useState(null);
@@ -71,6 +72,32 @@ export default function Home() {
         setData(formatted);
         setPrice(formatted.at(-1)?.price ?? null);
 
+        // --- Predicción con regresión lineal ---
+        if (formatted.length > 0) {
+          const prices = formatted.map((p) => p.price);
+          const n = prices.length;
+          const x = [...Array(n).keys()];
+          const y = prices;
+
+          const meanX = x.reduce((a, b) => a + b, 0) / n;
+          const meanY = y.reduce((a, b) => a + b, 0) / n;
+
+          const m =
+            x.reduce((sum, xi, i) => sum + (xi - meanX) * (y[i] - meanY), 0) /
+            x.reduce((sum, xi) => sum + (xi - meanX) ** 2, 0);
+          const b = meanY - m * meanX;
+
+          const future = [...Array(7).keys()].map((i) => {
+            const xi = n + i;
+            return {
+              date: `Día +${i + 1}`,
+              forecast: m * xi + b,
+            };
+          });
+
+          setForecast(future);
+        }
+
         // 2) Datos extra
         const resExtra = await fetch(
           `https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids=${crypto}`,
@@ -111,7 +138,7 @@ export default function Home() {
           };
 
           setSignal(newSignal);
-          setHistory((prev) => [newSignal, ...prev].slice(0, 10)); // solo últimas 10
+          setHistory((prev) => [newSignal, ...prev].slice(0, 10));
         }
 
         setLastUpdate(new Date().toLocaleTimeString());
@@ -162,7 +189,9 @@ export default function Home() {
         <p className="text-2xl">
           {price ? `$${price.toFixed(2)}` : "Cargando..."}
         </p>
-        <p className="text-sm text-gray-400">Última actualización: {lastUpdate}</p>
+        <p className="text-sm text-gray-400">
+          Última actualización: {lastUpdate}
+        </p>
       </div>
 
       {/* Extra Data */}
@@ -193,7 +222,9 @@ export default function Home() {
             {signal.recommendation} ({signal.probability}% éxito)
           </p>
           <p>RSI: {signal.rsi.toFixed(2)}</p>
-          <p>MA7: {signal.ma7.toFixed(2)} | MA30: {signal.ma30.toFixed(2)}</p>
+          <p>
+            MA7: {signal.ma7.toFixed(2)} | MA30: {signal.ma30.toFixed(2)}
+          </p>
         </div>
       )}
 
@@ -245,14 +276,40 @@ export default function Home() {
       {/* Gráfico */}
       <div className="mt-6 bg-gray-800 p-4 rounded-2xl shadow-lg h-80">
         <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={data}>
+          <LineChart data={[...data, ...forecast]}>
             <CartesianGrid strokeDasharray="3 3" stroke="#444" />
             <XAxis dataKey="date" />
             <YAxis domain={["auto", "auto"]} />
             <Tooltip />
-            <Line type="monotone" dataKey="price" stroke="#3b82f6" dot={false} />
-            <Line type="monotone" dataKey="ma7" stroke="#22c55e" dot={false} />
-            <Line type="monotone" dataKey="ma30" stroke="#eab308" dot={false} />
+            <Line
+              type="monotone"
+              dataKey="price"
+              stroke="#3b82f6"
+              dot={false}
+              name="Precio real"
+            />
+            <Line
+              type="monotone"
+              dataKey="ma7"
+              stroke="#22c55e"
+              dot={false}
+              name="MA7"
+            />
+            <Line
+              type="monotone"
+              dataKey="ma30"
+              stroke="#eab308"
+              dot={false}
+              name="MA30"
+            />
+            <Line
+              type="monotone"
+              dataKey="forecast"
+              stroke="#f97316"
+              dot={false}
+              strokeDasharray="5 5"
+              name="Predicción"
+            />
           </LineChart>
         </ResponsiveContainer>
       </div>
