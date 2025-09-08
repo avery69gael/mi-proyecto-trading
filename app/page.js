@@ -10,6 +10,7 @@ import {
   ResponsiveContainer,
   ReferenceLine,
 } from "recharts";
+import toast, { Toaster } from "react-hot-toast";
 
 export default function Home() {
   const [data, setData] = useState([]);
@@ -18,12 +19,12 @@ export default function Home() {
   const [extraData, setExtraData] = useState({});
   const [signal, setSignal] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
   const [lastUpdate, setLastUpdate] = useState(null);
 
-  // Función para calcular RSI
+  // RSI
   function calculateRSI(data, period = 14) {
-    let gains = 0, losses = 0;
+    let gains = 0,
+      losses = 0;
     for (let i = 1; i < period; i++) {
       const diff = data[i].price - data[i - 1].price;
       if (diff >= 0) gains += diff;
@@ -41,7 +42,6 @@ export default function Home() {
     async function fetchData() {
       try {
         setLoading(true);
-        setError(null);
 
         // 1) Precios históricos
         const res = await fetch(
@@ -56,9 +56,13 @@ export default function Home() {
           const date = new Date(p[0]).toLocaleDateString();
           const price = p[1];
           const ma7 =
-            i >= 6 ? arr.slice(i - 6, i + 1).reduce((a, b) => a + b[1], 0) / 7 : null;
+            i >= 6
+              ? arr.slice(i - 6, i + 1).reduce((a, b) => a + b[1], 0) / 7
+              : null;
           const ma30 =
-            i >= 29 ? arr.slice(i - 29, i + 1).reduce((a, b) => a + b[1], 0) / 30 : null;
+            i >= 29
+              ? arr.slice(i - 29, i + 1).reduce((a, b) => a + b[1], 0) / 30
+              : null;
           return { date, price, ma7, ma30 };
         });
 
@@ -80,8 +84,10 @@ export default function Home() {
 
         // 3) Señal IA
         if (formatted.length >= 30) {
-          const ma7 = formatted.slice(-7).reduce((a, b) => a + b.price, 0) / 7;
-          const ma30 = formatted.slice(-30).reduce((a, b) => a + b.price, 0) / 30;
+          const ma7 =
+            formatted.slice(-7).reduce((a, b) => a + b.price, 0) / 7;
+          const ma30 =
+            formatted.slice(-30).reduce((a, b) => a + b.price, 0) / 30;
           const rsi = calculateRSI(formatted.slice(-15));
 
           let recommendation = "Mantener ⚖️";
@@ -102,13 +108,13 @@ export default function Home() {
         if (err.name !== "AbortError") {
           console.warn("⚠️ Error detectado:", err.message);
 
-          // Retry automático en 2s
+          // Notificación toast
+          toast.error("API saturada, reintentando en 2s...");
+
+          // Retry en 2s
           setTimeout(() => {
             fetchData();
           }, 2000);
-
-          // Mantener último dato en pantalla
-          setError("⚠️ API saturada, reintentando...");
         }
       } finally {
         setLoading(false);
@@ -121,6 +127,9 @@ export default function Home() {
 
   return (
     <main className="min-h-screen bg-gradient-to-br from-gray-900 via-black to-gray-800 text-white">
+      {/* Toast container */}
+      <Toaster position="bottom-right" />
+
       {/* Navbar */}
       <header className="bg-gray-900 shadow-lg p-4 flex flex-col md:flex-row md:justify-between md:items-center gap-3 transition-all">
         <h1 className="text-xl md:text-2xl font-bold text-center md:text-left">
@@ -139,32 +148,42 @@ export default function Home() {
 
       <section className="p-6 grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* Precio */}
-        <div className="bg-gray-800 p-4 rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-300">
+        <div className="bg-gray-800 p-4 rounded-2xl shadow-lg">
           <h2 className="text-lg font-semibold mb-2">💰 Precio actual</h2>
-          {price ? (
+          {loading ? (
+            <div className="flex justify-center items-center h-20">
+              <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-white"></div>
+            </div>
+          ) : price ? (
             <p className="text-2xl font-bold">${price.toFixed(2)}</p>
           ) : (
-            <p>Cargando...</p>
+            <p>Sin datos</p>
           )}
         </div>
 
         {/* Datos extra */}
-        <div className="bg-gray-800 p-4 rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-300">
+        <div className="bg-gray-800 p-4 rounded-2xl shadow-lg">
           <h2 className="text-lg font-semibold mb-2">📊 Datos de mercado</h2>
-          {extraData.marketCap ? (
+          {loading ? (
+            <div className="flex justify-center items-center h-20">
+              <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-white"></div>
+            </div>
+          ) : extraData.marketCap ? (
             <ul>
               <li>Market Cap: ${extraData.marketCap.toLocaleString()}</li>
               <li>Volumen 24h: ${extraData.volume.toLocaleString()}</li>
             </ul>
           ) : (
-            <p>Cargando...</p>
+            <p>Sin datos</p>
           )}
         </div>
 
         {/* Señal IA */}
-        <div className="bg-gray-800 p-4 rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-300 col-span-1 md:col-span-2">
+        <div className="bg-gray-800 p-4 rounded-2xl shadow-lg col-span-1 md:col-span-2">
           <h2 className="text-lg font-semibold mb-2">🤖 Señal IA</h2>
-          {signal ? (
+          {loading ? (
+            <p>Cargando...</p>
+          ) : signal ? (
             <div>
               <p
                 className={`text-xl font-bold ${
@@ -183,64 +202,14 @@ export default function Home() {
               </p>
             </div>
           ) : (
-            <p>Cargando...</p>
+            <p>Sin datos</p>
           )}
         </div>
       </section>
-
-      {/* Gráficos */}
-      <section className="p-6 grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="bg-gray-800 p-4 rounded-2xl shadow-lg hover:shadow-2xl transition-all">
-          <h2 className="text-lg font-semibold mb-2">📈 Precio y Medias</h2>
-          {data.length ? (
-            <ResponsiveContainer width="100%" height={300}>
-              <LineChart data={data}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="date" hide />
-                <YAxis />
-                <Tooltip />
-                <Line type="monotone" dataKey="price" stroke="#8884d8" dot={false} />
-                <Line type="monotone" dataKey="ma7" stroke="#4ade80" dot={false} />
-                <Line type="monotone" dataKey="ma30" stroke="#f87171" dot={false} />
-              </LineChart>
-            </ResponsiveContainer>
-          ) : (
-            <p>{error || "Cargando gráfico..."}</p>
-          )}
-        </div>
-
-        <div className="bg-gray-800 p-4 rounded-2xl shadow-lg hover:shadow-2xl transition-all">
-          <h2 className="text-lg font-semibold mb-2">📉 RSI (Índice de Fuerza Relativa)</h2>
-          {data.length ? (
-            <ResponsiveContainer width="100%" height={300}>
-              <LineChart
-                data={data.map((d, i, arr) => ({
-                  ...d,
-                  rsi: i >= 14 ? calculateRSI(arr.slice(i - 14, i)) : null,
-                }))}
-              >
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="date" hide />
-                <YAxis domain={[0, 100]} />
-                <Tooltip />
-                <Line type="monotone" dataKey="rsi" stroke="#60a5fa" dot={false} />
-                <ReferenceLine y={70} stroke="red" strokeDasharray="3 3" />
-                <ReferenceLine y={30} stroke="green" strokeDasharray="3 3" />
-              </LineChart>
-            </ResponsiveContainer>
-          ) : (
-            <p>{error || "Cargando RSI..."}</p>
-          )}
-        </div>
-      </section>
-
-      {/* Última actualización */}
-      <footer className="p-4 text-center text-gray-400 text-sm">
-        Última actualización: {lastUpdate || "Cargando..."}
-      </footer>
     </main>
   );
 }
+
 
 
 
