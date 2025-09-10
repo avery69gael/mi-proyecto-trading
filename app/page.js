@@ -45,32 +45,42 @@ export default function Home() {
   // ---------- utils ----------
   const saveToLocal = (key, value) => {
     try {
-      localStorage.setItem(key, JSON.stringify(value));
+      if (typeof window !== "undefined") {
+        localStorage.setItem(key, JSON.stringify(value));
+      }
     } catch {}
   };
   const readFromLocal = (key) => {
     try {
-      const v = localStorage.getItem(key);
-      return v ? JSON.parse(v) : null;
+      if (typeof window !== "undefined") {
+        const v = localStorage.getItem(key);
+        return v ? JSON.parse(v) : null;
+      }
     } catch {
       return null;
     }
   };
 
-  function calculateRSI(window, period = 14) {
-    if (!window || window.length <= period) return null;
-    let gains = 0;
-    let losses = 0;
-    for (let i = 1; i <= period; i++) {
-      const change = window[i].price - window[i - 1].price;
-      if (change > 0) gains += change;
-      else losses -= change;
+  function calculateRSI(pricesArray, period = 14) {
+    if (!pricesArray || pricesArray.length <= period) {
+      return pricesArray.map(() => ({ rsi: null }));
     }
-    const avgGain = gains / period;
-    const avgLoss = losses / period;
-    if (avgLoss === 0) return 100;
-    const rs = avgGain / avgLoss;
-    return Number((100 - 100 / (1 + rs)).toFixed(2));
+    const rsiData = [];
+    for (let i = period; i < pricesArray.length; i++) {
+      const window = pricesArray.slice(i - period, i + 1);
+      let gains = 0;
+      let losses = 0;
+      for (let j = 1; j <= period; j++) {
+        const change = window[j].price - window[j - 1].price;
+        if (change > 0) gains += change;
+        else losses -= change;
+      }
+      const avgGain = gains / period;
+      const avgLoss = losses / period;
+      const rs = avgLoss === 0 ? 100 : avgGain / avgLoss;
+      rsiData.push({ date: window[window.length - 1].date, rsi: Number((100 - 100 / (1 + rs)).toFixed(2)) });
+    }
+    return rsiData;
   }
 
   function makeLinearForecast(pricesArray, days = 7) {
@@ -129,21 +139,49 @@ export default function Home() {
   useEffect(() => saveToLocal("alerts", alerts), [alerts]);
   useEffect(() => saveToLocal("signals_history", history), [history]);
 
-  // ---------- fetch de datos ----------
-  useEffect(() => {
-    if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
-    debounceTimerRef.current = setTimeout(() => {
-      if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
-      doFetch();
-    }, 200);
+  // ---------- fetch de datos refactorizado ----------
+  async function fetchHistoricalData(coin, signal) {
+    const response = await fetch(
+      `https://api.coingecko.com/api/v3/coins/${coin}/market_chart?vs_currency=usd&days=30&interval=daily`,
+      { signal }
+    );
+    if (!response.ok) throw new Error("Histórico falló");
+    const json = await response.json();
+    return json.prices.map((p, i, arr) => {
+      const date = new Date(p[0]).toLocaleDateString();
+      const priceVal = p[1];
+      const ma7 =
+        i >= 6 ? arr.slice(i - 6, i + 1).reduce((a, b) => a + b[1], 0) / 7 : null;
+      const ma30 =
+        i >= 29 ? arr.slice(i - 29, i + 1).reduce((a, b) => a + b[1], 0) / 30 : null;
+      return { date, price: priceVal, ma7, ma30 };
+    });
+  }
 
-    return () => {
-      if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
-      if (abortRef.current) abortRef.current.abort();
-      if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
+  async function fetchCurrentPrice(coin, signal) {
+    const response = await fetch(
+      `https://api.coingecko.com/api/v3/simple/price?ids=${coin}&vs_currencies=usd`,
+      { signal }
+    );
+    if (!response.ok) throw new Error("Precio falló");
+    const json = await response.json();
+    return json?.[coin]?.usd ?? null;
+  }
+
+  async function fetchMarketData(coin, signal) {
+    const response = await fetch(
+      `https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids=${coin}&order=market_cap_desc&per_page=1&page=1`,
+      { signal }
+    );
+    if (!response.ok) throw new Error("Datos de mercado fallaron");
+    const json = await response.json();
+    const info = json?.[0] ?? {};
+    return {
+      marketCap: info.market_cap ?? null,
+      volume: info.total_volume ?? null,
+      btcDominance: coin === "bitcoin" ? 100 : null,
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [coin]);
+  }
 
   async function doFetch() {
     if (abortRef.current) abortRef.current.abort();
@@ -154,63 +192,31 @@ export default function Home() {
     setError(null);
 
     try {
-      // historial
-      const histRes = await fetch(
-        `https://api.coingecko.com/api/v3/coins/${coin}/market_chart?vs_currency=usd&days=30&interval=daily`,
-        { signal: controller.signal }
-      );
-      if (!histRes.ok) throw new Error("Histórico falló");
-      const histJson = await histRes.json();
+      const [formatted, currentPrice, extra] = await Promise.all([
+        fetchHistoricalData(coin, controller.signal),
+        fetchCurrentPrice(coin, controller.signal),
+        fetchMarketData(coin, controller.signal),
+      ]);
 
-      const formatted = histJson.prices.map((p, i, arr) => {
-        const date = new Date(p[0]).toLocaleDateString();
-        const priceVal = p[1];
-        const ma7 =
-          i >= 6 ? arr.slice(i - 6, i + 1).reduce((a, b) => a + b[1], 0) / 7 : null;
-        const ma30 =
-          i >= 29 ? arr.slice(i - 29, i + 1).reduce((a, b) => a + b[1], 0) / 30 : null;
-        return { date, price: priceVal, ma7, ma30 };
-      });
+      const rsiData = calculateRSI(formatted);
+      const dataWithRSI = formatted.map((d, i) => ({
+        ...d,
+        rsi: rsiData[i] ? rsiData[i].rsi : null,
+      }));
 
-      // precio
-      const priceRes = await fetch(
-        `https://api.coingecko.com/api/v3/simple/price?ids=${coin}&vs_currencies=usd`,
-        { signal: controller.signal }
-      );
-      if (!priceRes.ok) throw new Error("Precio falló");
-      const priceJson = await priceRes.json();
-      const currentPrice = priceJson?.[coin]?.usd ?? formatted.at(-1)?.price ?? null;
-
-      // datos extra
-      const marketsRes = await fetch(
-        `https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids=${coin}&order=market_cap_desc&per_page=1&page=1`,
-        { signal: controller.signal }
-      );
-      const marketsJson = await marketsRes.json();
-      const info = marketsJson?.[0] ?? {};
-      const extra = {
-        marketCap: info.market_cap ?? null,
-        volume: info.total_volume ?? null,
-        btcDominance: coin === "bitcoin" ? 100 : null,
-      };
-
-      setData(formatted);
-      setPrice(currentPrice);
-      setExtraData(extra);
-
-      // señal IA
       let computedSignal = null;
-      if (formatted.length >= 30) {
-        const ma7Val = formatted.slice(-7).reduce((a, b) => a + b.price, 0) / 7;
-        const ma30Val = formatted.slice(-30).reduce((a, b) => a + b.price, 0) / 30;
-        const rsiVal = calculateRSI(formatted.slice(-15), 14);
+      if (dataWithRSI.length >= 30) {
+        const lastDataPoint = dataWithRSI.at(-1);
+        const lastRSI = lastDataPoint.rsi;
+        const ma7Val = lastDataPoint.ma7;
+        const ma30Val = lastDataPoint.ma30;
 
         let recommendation = "Mantener ⚖️";
         let probability = 55;
-        if (ma7Val > ma30Val && rsiVal < 70) {
+        if (ma7Val > ma30Val && lastRSI < 70) {
           recommendation = "Comprar ✅";
           probability = 70;
-        } else if (ma7Val < ma30Val && rsiVal > 30) {
+        } else if (ma7Val < ma30Val && lastRSI > 30) {
           recommendation = "Vender 🚨";
           probability = 70;
         }
@@ -218,20 +224,20 @@ export default function Home() {
           time: new Date().toLocaleTimeString(),
           recommendation,
           probability,
-          rsi: rsiVal,
+          rsi: lastRSI,
           ma7: ma7Val,
           ma30: ma30Val,
         };
         setHistory((prev) => [computedSignal, ...prev].slice(0, 50));
       }
       setSignal(computedSignal);
-
-      // forecast
       setForecast(makeLinearForecast(formatted.map((p) => p.price), 7));
-
+      setData(dataWithRSI);
+      setPrice(currentPrice ?? formatted.at(-1)?.price ?? null);
+      setExtraData(extra);
       saveToLocal(`cached_${coin}`, {
-        formatted,
-        currentPrice,
+        formatted: dataWithRSI,
+        currentPrice: currentPrice ?? formatted.at(-1)?.price ?? null,
         extra,
         computedSignal,
       });
@@ -256,6 +262,21 @@ export default function Home() {
       setLoading(false);
     }
   }
+
+  useEffect(() => {
+    if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+    debounceTimerRef.current = setTimeout(() => {
+      if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
+      doFetch();
+    }, 200);
+
+    return () => {
+      if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+      if (abortRef.current) abortRef.current.abort();
+      if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [coin]);
 
   // ---------- alertas ----------
   useEffect(() => {
@@ -336,24 +357,61 @@ export default function Home() {
           )}
         </div>
 
+        {/* Gráfico principal */}
+        <div className="lg:col-span-2 bg-gray-900 p-4 rounded-xl">
+          <h2 className="text-lg font-bold">Histórico de precios y medias móviles</h2>
+          <ResponsiveContainer width="100%" height={300}>
+            <LineChart data={data}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#555" />
+              <XAxis dataKey="date" stroke="#999" tickFormatter={(v) => v.slice(0, 5)} />
+              <YAxis domain={["dataMin", "dataMax"]} stroke="#999" />
+              <Tooltip />
+              <Line type="monotone" dataKey="price" stroke="#8884d8" name="Precio" />
+              <Line type="monotone" dataKey="ma7" stroke="#82ca9d" name="MA7" dot={false} />
+              <Line type="monotone" dataKey="ma30" stroke="#f6ad55" name="MA30" dot={false} />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+
+        {/* Gráfico RSI */}
+        <div className="bg-gray-900 p-4 rounded-xl">
+          <h2 className="text-lg font-bold">RSI (14 días)</h2>
+          <ResponsiveContainer width="100%" height={200}>
+            <LineChart data={data}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#555" />
+              <XAxis dataKey="date" hide />
+              <YAxis domain={[0, 100]} stroke="#999" />
+              <Tooltip />
+              <Line type="monotone" dataKey="rsi" stroke="#66bb6a" name="RSI" />
+              <ReferenceLine y={70} stroke="red" strokeDasharray="3 3" label={{ value: "Sobrecompra", position: "insideTopRight", fill: "red" }} />
+              <ReferenceLine y={30} stroke="lime" strokeDasharray="3 3" label={{ value: "Sobreventa", position: "insideBottomLeft", fill: "lime" }} />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+
         {/* Alertas */}
         <div className="lg:col-span-3 bg-gray-900 p-4 rounded-xl">
           <h2 className="text-lg font-bold">⚡ Alertas</h2>
-          <div className="flex gap-2 mt-2">
+          <div className="flex flex-wrap gap-2 mt-2 items-center">
             <select id="alertType" className="p-2 rounded bg-gray-800">
               <option value="priceAbove">Precio &gt; X</option>
               <option value="priceBelow">Precio &lt; X</option>
               <option value="rsiAbove">RSI &gt; X</option>
               <option value="rsiBelow">RSI &lt; X</option>
             </select>
-            <input id="alertValue" type="number" className="p-2 rounded bg-gray-800" />
+            <input
+              id="alertValue"
+              type="number"
+              className="p-2 rounded bg-gray-800 w-24"
+              placeholder="Valor"
+            />
             <button
               onClick={() => {
                 const type = document.getElementById("alertType").value;
                 const value = parseFloat(document.getElementById("alertValue").value);
                 addAlert(type, value);
               }}
-              className="bg-blue-600 px-3 rounded"
+              className="bg-blue-600 px-3 py-2 rounded"
             >
               Añadir
             </button>
@@ -370,6 +428,11 @@ export default function Home() {
           </ul>
         </div>
       </main>
+
+      <footer className="p-6 text-center text-gray-500 text-sm">
+        <p>La información en esta página es solo para fines informativos y no debe ser considerada asesoramiento financiero. El trading conlleva un alto riesgo de pérdida. Consulte a un profesional cualificado.</p>
+        <p className="mt-2">© 2024 Trading AI Dashboard</p>
+      </footer>
     </div>
   );
 }
