@@ -183,7 +183,7 @@ export default function Home() {
     };
   }
 
-  async function doFetch() {
+  async function doFetch(currentCoin) {
     if (abortRef.current) abortRef.current.abort();
     const controller = new AbortController();
     abortRef.current = controller;
@@ -193,9 +193,9 @@ export default function Home() {
 
     try {
       const [formatted, currentPrice, extra] = await Promise.all([
-        fetchHistoricalData(coin, controller.signal),
-        fetchCurrentPrice(coin, controller.signal),
-        fetchMarketData(coin, controller.signal),
+        fetchHistoricalData(currentCoin, controller.signal),
+        fetchCurrentPrice(currentCoin, controller.signal),
+        fetchMarketData(currentCoin, controller.signal),
       ]);
 
       const rsiData = calculateRSI(formatted);
@@ -235,7 +235,7 @@ export default function Home() {
       setData(dataWithRSI);
       setPrice(currentPrice ?? formatted.at(-1)?.price ?? null);
       setExtraData(extra);
-      saveToLocal(`cached_${coin}`, {
+      saveToLocal(`cached_${currentCoin}`, {
         formatted: dataWithRSI,
         currentPrice: currentPrice ?? formatted.at(-1)?.price ?? null,
         extra,
@@ -245,7 +245,7 @@ export default function Home() {
       setLastUpdate(new Date().toLocaleTimeString());
       backoffRef.current = 0;
     } catch (err) {
-      const cached = readFromLocal(`cached_${coin}`);
+      const cached = readFromLocal(`cached_${currentCoin}`);
       if (cached) {
         setData(cached.formatted || []);
         setPrice(cached.currentPrice ?? null);
@@ -257,7 +257,7 @@ export default function Home() {
       }
       const backoff = Math.min(30000, 2000 * Math.pow(2, backoffRef.current));
       backoffRef.current++;
-      retryTimerRef.current = setTimeout(() => doFetch(), backoff);
+      retryTimerRef.current = setTimeout(() => doFetch(currentCoin), backoff);
     } finally {
       setLoading(false);
     }
@@ -267,7 +267,7 @@ export default function Home() {
     if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
     debounceTimerRef.current = setTimeout(() => {
       if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
-      doFetch();
+      doFetch(coin);
     }, 200);
 
     return () => {
