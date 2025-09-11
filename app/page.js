@@ -211,13 +211,13 @@ export default function Home() {
         const ma7Val = lastDataPoint.ma7;
         const ma30Val = lastDataPoint.ma30;
 
-        let recommendation = "Mantener ⚖️";
+        let recommendation = "Mantener";
         let probability = 55;
         if (ma7Val > ma30Val && lastRSI < 70) {
-          recommendation = "Comprar ✅";
+          recommendation = "Comprar";
           probability = 70;
         } else if (ma7Val < ma30Val && lastRSI > 30) {
-          recommendation = "Vender 🚨";
+          recommendation = "Vender";
           probability = 70;
         }
         computedSignal = {
@@ -251,9 +251,9 @@ export default function Home() {
         setPrice(cached.currentPrice ?? null);
         setExtraData(cached.extra ?? {});
         setSignal(cached.computedSignal ?? null);
-        setError("⚠️ Mostrando datos en caché");
+        setError("Mostrando datos en caché");
       } else {
-        setError("❌ Error de red");
+        setError("Error de red");
       }
       const backoff = Math.min(30000, 2000 * Math.pow(2, backoffRef.current));
       backoffRef.current++;
@@ -289,7 +289,7 @@ export default function Home() {
       if (a.type === "rsiAbove" && signal?.rsi > a.value) triggered = true;
       if (a.type === "rsiBelow" && signal?.rsi < a.value) triggered = true;
       if (triggered && (!a.lastTriggeredAt || now - a.lastTriggeredAt > 300000)) {
-        toast(`🚨 ${formatAlertText(a, coin)}`);
+        toast(`Alerta: ${formatAlertText(a, coin)}`);
         setAlerts((prev) =>
           prev.map((p) => (p.id === a.id ? { ...p, lastTriggeredAt: now } : p))
         );
@@ -308,7 +308,7 @@ export default function Home() {
     setAlerts((prev) => prev.filter((a) => a.id !== id));
   }
 
-  // --- Nuevo código para la conexión con Supabase ---
+  // --- Código para la conexión con Supabase ---
   async function registerAlert(email, coin, type, value) {
     const supabaseUrl = 'https://fddsnlznyhhtueodxiwd.supabase.co';
     const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZkZHNubHpueWhodHVlb2R4aXdkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTc1MjU2ODksImV4cCI6MjA3MzEwMTY4OX0.EeFnjNIHCI6ovg-JtES2ceHJ74rVoW03b9Q5W2iJhV8';
@@ -335,24 +335,24 @@ export default function Home() {
         throw new Error(data.message || 'Error al registrar la alerta.');
       }
 
-      toast.success('✅ Alerta registrada con éxito!');
+      toast.success('Alerta registrada con éxito');
     } catch (error) {
       console.error('Error al registrar la alerta:', error);
-      toast.error('❌ No se pudo registrar la alerta.');
+      toast.error('No se pudo registrar la alerta.');
     }
   }
-  // --- Fin del nuevo código de Supabase ---
+  // --- Fin del código de Supabase ---
 
   // ---------- UI ----------
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-950 via-gray-900 to-black text-white">
+    <div className="min-h-screen bg-neutral-950 text-neutral-300 font-sans">
       <Toaster position="bottom-right" />
-      <header className="bg-gradient-to-r from-indigo-700 via-purple-700 to-pink-600 p-4 flex flex-col md:flex-row justify-between items-center gap-3 shadow-lg">
-        <h1 className="text-xl md:text-2xl font-bold">🚀 Trading AI Dashboard</h1>
+      <header className="bg-neutral-900 p-4 border-b border-neutral-800 flex flex-col md:flex-row justify-between items-center gap-3">
+        <h1 className="text-xl md:text-2xl font-bold text-white">Trading Dashboard</h1>
         <select
           value={coin}
           onChange={(e) => setCoin(e.target.value)}
-          className="bg-gray-900/70 p-2 rounded border border-gray-700 text-white"
+          className="bg-neutral-800/70 p-2 rounded border border-neutral-700 text-neutral-200"
         >
           <option value="bitcoin">Bitcoin (BTC)</option>
           <option value="ethereum">Ethereum (ETH)</option>
@@ -362,44 +362,44 @@ export default function Home() {
         </select>
       </header>
 
-      {loading && <p className="p-6 text-center">⏳ Cargando...</p>}
-      {error && <p className="p-6 text-center text-red-400">{error}</p>}
+      {loading && <p className="p-6 text-center text-neutral-500">Cargando...</p>}
+      {error && <p className="p-6 text-center text-red-500">{error}</p>}
 
       <main className="p-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="bg-green-900/40 rounded-xl p-6">
-          <h2 className="text-lg font-bold">💰 Precio actual</h2>
-          <p className="text-2xl mt-2">{price ? `$${price}` : "—"}</p>
-          <p className="text-sm mt-2">Última actualización: {lastUpdate}</p>
+        <div className="bg-neutral-900 rounded-xl p-6 border border-neutral-800">
+          <h2 className="text-lg font-bold text-white">Precio Actual</h2>
+          <p className="text-3xl mt-2 text-white">{price ? `$${price}` : "—"}</p>
+          <p className="text-sm mt-2 text-neutral-400">Última actualización: {lastUpdate}</p>
         </div>
 
-        <div className="bg-blue-900/40 rounded-xl p-6">
-          <h2 className="text-lg font-bold">📊 Mercado</h2>
-          <p>Volumen: ${formatNumber(extraData.volume)}</p>
-          <p>Market Cap: ${formatNumber(extraData.marketCap)}</p>
-          <p>Dominancia BTC: {extraData.btcDominance ?? "—"}%</p>
+        <div className="bg-neutral-900 rounded-xl p-6 border border-neutral-800">
+          <h2 className="text-lg font-bold text-white">Datos de Mercado</h2>
+          <p className="text-neutral-400">Volumen: ${formatNumber(extraData.volume)}</p>
+          <p className="text-neutral-400">Capitalización: ${formatNumber(extraData.marketCap)}</p>
+          <p className="text-neutral-400">Dominancia BTC: {extraData.btcDominance ?? "—"}%</p>
         </div>
 
-        <div className="bg-gray-800 rounded-xl p-6">
-          <h2 className="text-lg font-bold">🤖 Señal IA</h2>
+        <div className="bg-neutral-900 rounded-xl p-6 border border-neutral-800">
+          <h2 className="text-lg font-bold text-white">Señal IA</h2>
           {signal ? (
             <>
-              <p>{signal.recommendation}</p>
-              <p>Prob: {signal.probability}%</p>
-              <p>RSI: {signal.rsi}</p>
+              <p className="text-neutral-400">Recomendación: {signal.recommendation}</p>
+              <p className="text-neutral-400">Probabilidad: {signal.probability}%</p>
+              <p className="text-neutral-400">RSI: {signal.rsi}</p>
             </>
           ) : (
-            <p>—</p>
+            <p className="text-neutral-400">—</p>
           )}
         </div>
 
         {/* Gráfico principal */}
-        <div className="lg:col-span-2 bg-gray-900 p-4 rounded-xl">
-          <h2 className="text-lg font-bold">Histórico de precios y medias móviles</h2>
+        <div className="lg:col-span-2 bg-neutral-900 p-4 rounded-xl border border-neutral-800">
+          <h2 className="text-lg font-bold text-white">Histórico de Precios</h2>
           <ResponsiveContainer width="100%" height={300}>
             <LineChart data={data}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#555" />
-              <XAxis dataKey="date" stroke="#999" tickFormatter={(v) => v.slice(0, 5)} />
-              <YAxis domain={["dataMin", "dataMax"]} stroke="#999" />
+              <CartesianGrid strokeDasharray="3 3" stroke="#444" />
+              <XAxis dataKey="date" stroke="#666" tickFormatter={(v) => v.slice(0, 5)} />
+              <YAxis domain={["dataMin", "dataMax"]} stroke="#666" />
               <Tooltip />
               <Line type="monotone" dataKey="price" stroke="#8884d8" name="Precio" />
               <Line type="monotone" dataKey="ma7" stroke="#82ca9d" name="MA7" dot={false} />
@@ -409,26 +409,26 @@ export default function Home() {
         </div>
 
         {/* Gráfico RSI */}
-        <div className="bg-gray-900 p-4 rounded-xl">
-          <h2 className="text-lg font-bold">RSI (14 días)</h2>
+        <div className="bg-neutral-900 p-4 rounded-xl border border-neutral-800">
+          <h2 className="text-lg font-bold text-white">RSI (14 días)</h2>
           <ResponsiveContainer width="100%" height={200}>
             <LineChart data={data}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#555" />
+              <CartesianGrid strokeDasharray="3 3" stroke="#444" />
               <XAxis dataKey="date" hide />
-              <YAxis domain={[0, 100]} stroke="#999" />
+              <YAxis domain={[0, 100]} stroke="#666" />
               <Tooltip />
               <Line type="monotone" dataKey="rsi" stroke="#66bb6a" name="RSI" />
-              <ReferenceLine y={70} stroke="red" strokeDasharray="3 3" label={{ value: "Sobrecompra", position: "insideTopRight", fill: "red" }} />
-              <ReferenceLine y={30} stroke="lime" strokeDasharray="3 3" label={{ value: "Sobreventa", position: "insideBottomLeft", fill: "lime" }} />
+              <ReferenceLine y={70} stroke="#ef4444" strokeDasharray="3 3" label={{ value: "Sobrecompra", position: "insideTopRight", fill: "#ef4444" }} />
+              <ReferenceLine y={30} stroke="#22c55e" strokeDasharray="3 3" label={{ value: "Sobreventa", position: "insideBottomLeft", fill: "#22c55e" }} />
             </LineChart>
           </ResponsiveContainer>
         </div>
 
         {/* Alertas */}
-        <div className="lg:col-span-3 bg-gray-900 p-4 rounded-xl">
-          <h2 className="text-lg font-bold">⚡ Alertas</h2>
+        <div className="lg:col-span-3 bg-neutral-900 p-4 rounded-xl border border-neutral-800">
+          <h2 className="text-lg font-bold text-white">Alertas Inteligentes</h2>
           <div className="flex flex-wrap gap-2 mt-2 items-center">
-            <select id="alertType" className="p-2 rounded bg-gray-800">
+            <select id="alertType" className="p-2 rounded bg-neutral-800 text-neutral-200">
               <option value="priceAbove">Precio &gt; X</option>
               <option value="priceBelow">Precio &lt; X</option>
               <option value="rsiAbove">RSI &gt; X</option>
@@ -437,7 +437,7 @@ export default function Home() {
             <input
               id="alertValue"
               type="number"
-              className="p-2 rounded bg-gray-800 w-24"
+              className="p-2 rounded bg-neutral-800 text-neutral-200 w-24"
               placeholder="Valor"
             />
             <button
@@ -446,36 +446,36 @@ export default function Home() {
                 const value = parseFloat(document.getElementById("alertValue").value);
                 addAlert(type, value);
               }}
-              className="bg-blue-600 px-3 py-2 rounded"
+              className="bg-neutral-700 hover:bg-neutral-600 px-3 py-2 rounded text-neutral-100 transition-colors"
             >
               Añadir
             </button>
           </div>
           <ul className="mt-3 space-y-2">
             {alerts.map((a) => (
-              <li key={a.id} className="flex justify-between bg-gray-800 p-2 rounded">
+              <li key={a.id} className="flex justify-between bg-neutral-800 p-2 rounded text-neutral-200">
                 {formatAlertText(a, coin)}
                 <button onClick={() => removeAlert(a.id)} className="text-red-400">
-                  ❌
+                  Quitar
                 </button>
               </li>
             ))}
           </ul>
         </div>
         
-        {/* --- Nuevo código del formulario de email --- */}
-        <div className="lg:col-span-3 bg-gray-900 p-4 rounded-xl">
-            <h2 className="text-lg font-bold">📧 Recibe alertas por email</h2>
-            <p className="text-sm text-gray-400 mb-4">Regístrate para recibir notificaciones por correo cuando tus alertas se activen, incluso cuando no estés en la web.</p>
+        {/* Formulario de email */}
+        <div className="lg:col-span-3 bg-neutral-900 p-4 rounded-xl border border-neutral-800">
+            <h2 className="text-lg font-bold text-white">Recibe Alertas por Email</h2>
+            <p className="text-sm text-neutral-500 mb-4">Regístrate para recibir notificaciones cuando tus alertas se activen.</p>
             <div className="flex flex-col md:flex-row flex-wrap gap-4 items-start">
                 <input
                     id="emailInput"
                     type="email"
                     placeholder="Introduce tu email"
-                    className="p-2 rounded bg-gray-800 text-white w-full md:w-auto flex-grow"
+                    className="p-2 rounded bg-neutral-800 text-neutral-200 w-full md:w-auto flex-grow"
                 />
                 <div className="flex flex-wrap gap-2 w-full md:w-auto">
-                    <select id="alertTypeEmail" className="p-2 rounded bg-gray-800 text-white">
+                    <select id="alertTypeEmail" className="p-2 rounded bg-neutral-800 text-neutral-200">
                         <option value="priceAbove">Precio > X</option>
                         <option value="priceBelow">Precio < X</option>
                         <option value="rsiAbove">RSI > X</option>
@@ -484,7 +484,7 @@ export default function Home() {
                     <input
                         id="alertValueEmail"
                         type="number"
-                        className="p-2 rounded bg-gray-800 text-white w-24"
+                        className="p-2 rounded bg-neutral-800 text-neutral-200 w-24"
                         placeholder="Valor"
                     />
                     <button
@@ -498,23 +498,22 @@ export default function Home() {
                                 toast.error("Por favor, rellena todos los campos.");
                             }
                         }}
-                        className="bg-purple-600 hover:bg-purple-700 transition-colors px-3 py-2 rounded"
+                        className="bg-neutral-700 hover:bg-neutral-600 px-3 py-2 rounded text-neutral-100 transition-colors"
                     >
                         Activar Alerta
                     </button>
                 </div>
             </div>
         </div>
-        {/* --- Fin del nuevo código del formulario de email --- */}
-
       </main>
 
-      <footer className="p-6 text-center text-gray-500 text-sm">
-        <p>La información en esta página es solo para fines informativos y no debe ser considerada asesoramiento financiero. El trading conlleva un alto riesgo de pérdida. Consulte a un profesional cualificado.</p>
-        <p className="mt-2">© 2024 Trading AI Dashboard</p>
+      <footer className="p-6 text-center text-neutral-600 text-sm">
+        <p>La información en esta página es solo para fines informativos y no debe ser considerada asesoramiento financiero. El trading conlleva un alto riesgo de pérdida.</p>
+        <p className="mt-2">© 2024 Trading Dashboard</p>
       </footer>
     </div>
   );
+}
 }
 
 
