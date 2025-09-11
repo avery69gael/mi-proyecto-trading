@@ -13,7 +13,8 @@
     "react": "19.1.0",
     "react-dom": "19.1.0",
     "react-hot-toast": "^2.6.0",
-    "recharts": "^3.2.0"
+    "recharts": "^3.2.0",
+    "resend": "^6.0.3"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",
@@ -21,5 +22,18 @@
     "eslint": "^9",
     "eslint-config-next": "15.5.2",
     "tailwindcss": "^4"
-  }
+  },
+  "description": "This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://github.com/vercel/next.js/tree/canary/packages/create-next-app).",
+  "main": "index.js",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/avery69gael/mi-proyecto-trading.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/avery69gael/mi-proyecto-trading/issues"
+  },
+  "homepage": "https://github.com/avery69gael/mi-proyecto-trading#readme"
 }
