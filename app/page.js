@@ -1,162 +1,506 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from "react";
 import {
-  createClientComponentClient
-} from '@supabase/auth-helpers-nextjs';
-import styles from './page.module.css';
-import { useRouter } from 'next/navigation';
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  ReferenceLine,
+} from "recharts";
+import toast, { Toaster } from "react-hot-toast";
 
-export default function Dashboard() {
-  const router = useRouter();
-  const [session, setSession] = useState(null);
-  const supabase = createClientComponentClient();
-  const [cryptoData, setCryptoData] = useState([]);
-  const [selectedCoin, setSelectedCoin] = useState('bitcoin');
-  const [alertType, setAlertType] = useState('above');
-  const [alertValue, setAlertValue] = useState('');
-  const [email, setEmail] = useState('');
+export default function Home() {
+  const [coin, setCoin] = useState("bitcoin");
+  const [data, setData] = useState([]);
+  const [price, setPrice] = useState(null);
+  const [extraData, setExtraData] = useState({});
+  const [signal, setSignal] = useState(null);
+  const [history, setHistory] = useState([]);
+  const [forecast, setForecast] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [lastUpdate, setLastUpdate] = useState(null);
+  const [alerts, setAlerts] = useState([]);
 
-  const cryptoNames = ['bitcoin', 'ethereum', 'ripple', 'cardano', 'solana'];
+  // Estados para el formulario de email
+  const [email, setEmail] = useState("");
+  const [emailAlertType, setEmailAlertType] = useState("priceAbove");
+  const [emailAlertValue, setEmailAlertValue] = useState("");
 
-  useEffect(() => {
-    const fetchSession = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      setSession(session);
-      if (!session) {
-        router.push('/');
+  const abortRef = useRef(null);
+  const retryTimerRef = useRef(null);
+  const debounceTimerRef = useRef(null);
+  const backoffRef = useRef(0);
+
+  // ---------- utils ----------
+  const saveToLocal = (key, value) => {
+    try {
+      if (typeof window !== "undefined") {
+        localStorage.setItem(key, JSON.stringify(value));
       }
-    };
-    fetchSession();
-  }, [supabase, router]);
+    } catch {}
+  };
+  const readFromLocal = (key) => {
+    try {
+      if (typeof window !== "undefined") {
+        const v = localStorage.getItem(key);
+        return v ? JSON.parse(v) : null;
+      }
+    } catch {
+      return null;
+    }
+  };
 
+  function calculateRSI(pricesArray, period = 14) {
+    if (!pricesArray || pricesArray.length <= period) {
+      return pricesArray.map(() => ({ rsi: null }));
+    }
+    const rsiData = [];
+    for (let i = period; i < pricesArray.length; i++) {
+      const window = pricesArray.slice(i - period, i + 1);
+      let gains = 0;
+      let losses = 0;
+      for (let j = 1; j <= period; j++) {
+        const change = window[j].price - window[j - 1].price;
+        if (change > 0) gains += change;
+        else losses -= change;
+      }
+      const avgGain = gains / period;
+      const avgLoss = losses / period;
+      const rs = avgLoss === 0 ? 100 : avgGain / avgLoss;
+      rsiData.push({ date: window[window.length - 1].date, rsi: Number((100 - 100 / (1 + rs)).toFixed(2)) });
+    }
+    return rsiData;
+  }
+
+  function makeLinearForecast(pricesArray, days = 7) {
+    if (!pricesArray || pricesArray.length === 0) return [];
+    const n = pricesArray.length;
+    const x = Array.from({ length: n }, (_, i) => i);
+    const y = pricesArray.slice();
+
+    const meanX = x.reduce((a, b) => a + b, 0) / n;
+    const meanY = y.reduce((a, b) => a + b, 0) / n;
+
+    const m =
+      x.reduce((sum, xi, i) => sum + (xi - meanX) * (y[i] - meanY), 0) /
+      (x.reduce((sum, xi) => sum + (xi - meanX) ** 2, 0) || 1);
+    const b = meanY - m * meanX;
+
+    return Array.from({ length: days }, (_, i) => {
+      const xi = n + i;
+      return { date: `Día +${i + 1}`, forecast: m * xi + b };
+    });
+  }
+
+  function formatNumber(num) {
+    if (num === null || num === undefined) return "-";
+    if (Math.abs(num) >= 1e12) return `${(num / 1e12).toFixed(2)}T`;
+    if (Math.abs(num) >= 1e9) return `${(num / 1e9).toFixed(2)}B`;
+    if (Math.abs(num) >= 1e6) return `${(num / 1e6).toFixed(2)}M`;
+    if (Math.abs(num) >= 1e3) return `${(num / 1e3).toFixed(2)}K`;
+    return Number(num).toFixed(2);
+  }
+
+  function formatAlertText(a, coin) {
+    switch (a.type) {
+      case "priceAbove":
+        return `${coin.toUpperCase()} > ${a.value}`;
+      case "priceBelow":
+        return `${coin.toUpperCase()} < ${a.value}`;
+      case "rsiAbove":
+        return `RSI > ${a.value}`;
+      case "rsiBelow":
+        return `RSI < ${a.value}`;
+      default:
+        return `${a.type} ${a.value}`;
+    }
+  }
+
+  // ---------- inicialización ----------
   useEffect(() => {
-    const fetchCryptoData = async () => {
-      const response = await fetch(
-        'https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum,ripple,cardano,solana&vs_currencies=usd'
-      );
-      const data = await response.json();
-      setCryptoData(data);
-    };
+    const savedAlerts = readFromLocal("alerts");
+    if (savedAlerts) setAlerts(savedAlerts);
 
-    fetchCryptoData();
-    const interval = setInterval(fetchCryptoData, 10000); // 10 segundos
-    return () => clearInterval(interval);
+    const savedHistory = readFromLocal("signals_history");
+    if (savedHistory) setHistory(savedHistory);
   }, []);
 
-  const handleRegisterAlert = async e => {
-    e.preventDefault();
-    console.log('Botón de alerta presionado'); // <-- Esta es la línea que añadimos
-    if (!session) {
-      alert('Debes iniciar sesión para registrar una alerta.');
+  useEffect(() => saveToLocal("alerts", alerts), [alerts]);
+  useEffect(() => saveToLocal("signals_history", history), [history]);
+
+  // ---------- fetch de datos refactorizado ----------
+  async function fetchHistoricalData(coin, signal) {
+    const response = await fetch(
+      `https://api.coingecko.com/api/v3/coins/${coin}/market_chart?vs_currency=usd&days=30&interval=daily`,
+      { signal }
+    );
+    if (!response.ok) throw new Error("Histórico falló");
+    const json = await response.json();
+    return json.prices.map((p, i, arr) => {
+      const date = new Date(p[0]).toLocaleDateString();
+      const priceVal = p[1];
+      const ma7 =
+        i >= 6 ? arr.slice(i - 6, i + 1).reduce((a, b) => a + b[1], 0) / 7 : null;
+      const ma30 =
+        i >= 29 ? arr.slice(i - 29, i + 1).reduce((a, b) => a + b[1], 0) / 30 : null;
+      return { date, price: priceVal, ma7, ma30 };
+    });
+  }
+
+  async function fetchCurrentPrice(coin, signal) {
+    const response = await fetch(
+      `https://api.coingecko.com/api/v3/simple/price?ids=${coin}&vs_currencies=usd`,
+      { signal }
+    );
+    if (!response.ok) throw new Error("Precio falló");
+    const json = await response.json();
+    return json?.[coin]?.usd ?? null;
+  }
+
+  async function fetchMarketData(coin, signal) {
+    const response = await fetch(
+      `https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids=${coin}&order=market_cap_desc&per_page=1&page=1`,
+      { signal }
+    );
+    if (!response.ok) throw new Error("Datos de mercado fallaron");
+    const json = await response.json();
+    const info = json?.[0] ?? {};
+    return {
+      marketCap: info.market_cap ?? null,
+      volume: info.total_volume ?? null,
+      btcDominance: coin === "bitcoin" ? 100 : null,
+    };
+  }
+
+  async function doFetch(currentCoin) {
+    if (abortRef.current) abortRef.current.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      const [formatted, currentPrice, extra] = await Promise.all([
+        fetchHistoricalData(currentCoin, controller.signal),
+        fetchCurrentPrice(currentCoin, controller.signal),
+        fetchMarketData(currentCoin, controller.signal),
+      ]);
+
+      const rsiData = calculateRSI(formatted);
+      const dataWithRSI = formatted.map((d, i) => ({
+        ...d,
+        rsi: rsiData[i] ? rsiData[i].rsi : null,
+      }));
+
+      let computedSignal = null;
+      if (dataWithRSI.length >= 30) {
+        const lastDataPoint = dataWithRSI.at(-1);
+        const lastRSI = lastDataPoint.rsi;
+        const ma7Val = lastDataPoint.ma7;
+        const ma30Val = lastDataPoint.ma30;
+
+        let recommendation = "Mantener";
+        let probability = 55;
+        if (ma7Val > ma30Val && lastRSI < 70) {
+          recommendation = "Comprar";
+          probability = 70;
+        } else if (ma7Val < ma30Val && lastRSI > 30) {
+          recommendation = "Vender";
+          probability = 70;
+        }
+        computedSignal = {
+          time: new Date().toLocaleTimeString(),
+          recommendation,
+          probability,
+          rsi: lastRSI,
+          ma7: ma7Val,
+          ma30: ma30Val,
+        };
+        setHistory((prev) => [computedSignal, ...prev].slice(0, 50));
+      }
+      setSignal(computedSignal);
+      setForecast(makeLinearForecast(formatted.map((p) => p.price), 7));
+      setData(dataWithRSI);
+      setPrice(currentPrice ?? formatted.at(-1)?.price ?? null);
+      setExtraData(extra);
+      saveToLocal(`cached_${currentCoin}`, {
+        formatted: dataWithRSI,
+        currentPrice: currentPrice ?? formatted.at(-1)?.price ?? null,
+        extra,
+        computedSignal,
+      });
+
+      setLastUpdate(new Date().toLocaleTimeString());
+      backoffRef.current = 0;
+    } catch (err) {
+      const cached = readFromLocal(`cached_${currentCoin}`);
+      if (cached) {
+        setData(cached.formatted || []);
+        setPrice(cached.currentPrice ?? null);
+        setExtraData(cached.extra ?? {});
+        setSignal(cached.computedSignal ?? null);
+        setError("Mostrando datos en caché");
+      } else {
+        setError("Error de red");
+      }
+      const backoff = Math.min(30000, 2000 * Math.pow(2, backoffRef.current));
+      backoffRef.current++;
+      retryTimerRef.current = setTimeout(() => doFetch(currentCoin), backoff);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+    debounceTimerRef.current = setTimeout(() => {
+      if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
+      doFetch(coin);
+    }, 200);
+
+    return () => {
+      if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+      if (abortRef.current) abortRef.current.abort();
+      if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [coin]);
+
+  // ---------- alertas ----------
+  useEffect(() => {
+    if (!alerts.length || (!price && !signal)) return;
+    const now = Date.now();
+    alerts.forEach((a) => {
+      let triggered = false;
+      if (a.type === "priceAbove" && price > a.value) triggered = true;
+      if (a.type === "priceBelow" && price < a.value) triggered = true;
+      if (a.type === "rsiAbove" && signal?.rsi > a.value) triggered = true;
+      if (a.type === "rsiBelow" && signal?.rsi < a.value) triggered = true;
+      if (triggered && (!a.lastTriggeredAt || now - a.lastTriggeredAt > 300000)) {
+        toast(`Alerta: ${formatAlertText(a, coin)}`);
+        setAlerts((prev) =>
+          prev.map((p) => (p.id === a.id ? { ...p, lastTriggeredAt: now } : p))
+        );
+      }
+    });
+    // eslint-disable-next-line
+  }, [price, signal]);
+
+  function addAlert(type, value) {
+    if (isNaN(value)) return;
+    const newAlert = { id: Date.now(), type, value: Number(value) };
+    setAlerts((prev) => [...prev, newAlert]);
+  }
+
+  function removeAlert(id) {
+    setAlerts((prev) => prev.filter((a) => a.id !== id));
+  }
+
+  // --- Función para enviar el email de alerta de forma segura
+  const handleRegisterAlert = async () => {
+    // Tomamos los valores del formulario
+    const currentEmail = document.getElementById("emailInput").value;
+    const currentAlertType = document.getElementById("alertTypeEmail").value;
+    const currentAlertValue = parseFloat(document.getElementById("alertValueEmail").value);
+
+    // Verificamos que los datos sean válidos
+    if (!currentEmail || !currentAlertType || isNaN(currentAlertValue)) {
+      toast.error("Por favor, rellena todos los campos.");
       return;
     }
 
+    // Usamos el API que creamos en el servidor
     try {
       const response = await fetch('/api/send-email', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          email: session.user.email,
-          coin: selectedCoin,
-          alert_type: alertType,
-          alert_value: parseFloat(alertValue)
-        })
+          email: currentEmail,
+          coin: coin,
+          alert_type: currentAlertType,
+          alert_value: currentAlertValue,
+        }),
       });
 
-      const data = await response.json();
-
-      if (response.ok) {
-        alert('¡Alerta registrada con éxito! Revisa tu email.');
-        setAlertValue('');
-      } else {
-        alert('Error al registrar la alerta: ' + data.message);
+      if (!response.ok) {
+        throw new Error('Error al enviar el email');
       }
+
+      toast.success('Alerta por email registrada con éxito');
     } catch (error) {
-      console.error('Error al registrar la alerta:', error);
-      alert('Error de conexión. Por favor, inténtalo de nuevo.');
+      console.error('Error al registrar la alerta por email:', error);
+      toast.error('No se pudo registrar la alerta por email.');
     }
   };
 
-  const handleSignOut = async () => {
-    await supabase.auth.signOut();
-    router.push('/');
-  };
+  // --- Fin de la función para enviar email ---
 
+  // ---------- UI ----------
   return (
-    <div className={styles.container}>
-      <header className={styles.header}>
-        <h1 className={styles.title}>Trading Dashboard</h1>
-        {session && (
-          <div className={styles.userContainer}>
-            <span className={styles.userEmail}>{session.user.email}</span>
-            <button onClick={handleSignOut} className={styles.signOutButton}>
-              Cerrar sesión
-            </button>
-          </div>
-        )}
+    <div className="min-h-screen bg-neutral-950 text-neutral-300 font-sans">
+      <Toaster position="bottom-right" />
+      <header className="bg-neutral-900 p-4 border-b border-neutral-800 flex flex-col md:flex-row justify-between items-center gap-3">
+        <h1 className="text-xl md:text-2xl font-bold text-white">Trading Dashboard</h1>
+        <select
+          value={coin}
+          onChange={(e) => setCoin(e.target.value)}
+          className="bg-neutral-800/70 p-2 rounded border border-neutral-700 text-neutral-200"
+        >
+          <option value="bitcoin">Bitcoin (BTC)</option>
+          <option value="ethereum">Ethereum (ETH)</option>
+          <option value="solana">Solana (SOL)</option>
+          <option value="dogecoin">Dogecoin (DOGE)</option>
+          <option value="cardano">Cardano (ADA)</option>
+        </select>
       </header>
 
-      <main className={styles.main}>
-        <div className={styles.dataContainer}>
-          {cryptoNames.map(name => (
-            <div key={name} className={styles.cryptoCard}>
-              <h2>{name.charAt(0).toUpperCase() + name.slice(1)}</h2>
-              {cryptoData[name] && (
-                <p>
-                  Precio: ${' '}
-                  {cryptoData[name].usd
-                    ? cryptoData[name].usd.toLocaleString()
-                    : 'Cargando...'}
-                </p>
-              )}
-            </div>
-          ))}
+      {loading && <p className="p-6 text-center text-neutral-500">Cargando...</p>}
+      {error && <p className="p-6 text-center text-red-500">{error}</p>}
+
+      <main className="p-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="bg-neutral-900 rounded-xl p-6 border border-neutral-800">
+          <h2 className="text-lg font-bold text-white">Precio Actual</h2>
+          <p className="text-3xl mt-2 text-white">{price ? `$${price}` : "—"}</p>
+          <p className="text-sm mt-2 text-neutral-400">Última actualización: {lastUpdate}</p>
         </div>
 
-        <div className={styles.formContainer}>
-          <h2>Registrar una nueva alerta</h2>
-          <form onSubmit={handleRegisterAlert} className={styles.alertForm}>
-            <label htmlFor="coin">Selecciona la moneda:</label>
-            <select
-              id="coin"
-              value={selectedCoin}
-              onChange={e => setSelectedCoin(e.target.value)}
-            >
-              {cryptoNames.map(name => (
-                <option key={name} value={name}>
-                  {name.charAt(0).toUpperCase() + name.slice(1)}
-                </option>
-              ))}
-            </select>
+        <div className="bg-neutral-900 rounded-xl p-6 border border-neutral-800">
+          <h2 className="text-lg font-bold text-white">Datos de Mercado</h2>
+          <p className="text-neutral-400">Volumen: ${formatNumber(extraData.volume)}</p>
+          <p className="text-neutral-400">Capitalización: ${formatNumber(extraData.marketCap)}</p>
+          <p className="text-neutral-400">Dominancia BTC: {extraData.btcDominance ?? "—"}%</p>
+        </div>
 
-            <label htmlFor="alertType">Tipo de alerta:</label>
-            <select
-              id="alertType"
-              value={alertType}
-              onChange={e => setAlertType(e.target.value)}
-            >
-              <option value="above">Por encima de</option>
-              <option value="below">Por debajo de</option>
-            </select>
+        <div className="bg-neutral-900 rounded-xl p-6 border border-neutral-800">
+          <h2 className="text-lg font-bold text-white">Señal IA</h2>
+          {signal ? (
+            <>
+              <p className="text-neutral-400">Recomendación: {signal.recommendation}</p>
+              <p className="text-neutral-400">Probabilidad: {signal.probability}%</p>
+              <p className="text-neutral-400">RSI: {signal.rsi}</p>
+            </>
+          ) : (
+            <p className="text-neutral-400">—</p>
+          )}
+        </div>
 
-            <label htmlFor="alertValue">Valor del precio:</label>
+        {/* Gráfico principal */}
+        <div className="lg:col-span-2 bg-neutral-900 p-4 rounded-xl border border-neutral-800">
+          <h2 className="text-lg font-bold text-white">Histórico de Precios</h2>
+          <ResponsiveContainer width="100%" height={300}>
+            <LineChart data={data}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#444" />
+              <XAxis dataKey="date" stroke="#666" tickFormatter={(v) => v.slice(0, 5)} />
+              <YAxis domain={["dataMin", "dataMax"]} stroke="#666" />
+              <Tooltip />
+              <Line type="monotone" dataKey="price" stroke="#8884d8" name="Precio" />
+              <Line type="monotone" dataKey="ma7" stroke="#82ca9d" name="MA7" dot={false} />
+              <Line type="monotone" dataKey="ma30" stroke="#f6ad55" name="MA30" dot={false} />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+
+        {/* Gráfico RSI */}
+        <div className="bg-neutral-900 p-4 rounded-xl border border-neutral-800">
+          <h2 className="text-lg font-bold text-white">RSI (14 días)</h2>
+          <ResponsiveContainer width="100%" height={200}>
+            <LineChart data={data}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#444" />
+              <XAxis dataKey="date" hide />
+              <YAxis domain={[0, 100]} stroke="#666" />
+              <Tooltip />
+              <Line type="monotone" dataKey="rsi" stroke="#66bb6a" name="RSI" />
+              <ReferenceLine y={70} stroke="#ef4444" strokeDasharray="3 3" label={{ value: "Sobrecompra", position: "insideTopRight", fill: "#ef4444" }} />
+              <ReferenceLine y={30} stroke="#22c55e" strokeDasharray="3 3" label={{ value: "Sobreventa", position: "insideBottomLeft", fill: "#22c55e" }} />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+
+        {/* Alertas */}
+        <div className="lg:col-span-3 bg-neutral-900 p-4 rounded-xl border border-neutral-800">
+          <h2 className="text-lg font-bold text-white">Alertas Inteligentes</h2>
+          <div className="flex flex-wrap gap-2 mt-2 items-center">
+            <select id="alertType" className="p-2 rounded bg-neutral-800 text-neutral-200">
+              <option value="priceAbove">Precio {'>'} X</option>
+              <option value="priceBelow">Precio {'<'} X</option>
+              <option value="rsiAbove">RSI {'>'} X</option>
+              <option value="rsiBelow">RSI {'<'} X</option>
+            </select>
             <input
               id="alertValue"
               type="number"
-              step="0.01"
-              value={alertValue}
-              onChange={e => setAlertValue(e.target.value)}
-              required
+              className="p-2 rounded bg-neutral-800 text-neutral-200 w-24"
+              placeholder="Valor"
             />
-
-            <button type="submit" className={styles.submitButton}>
-              Registrar Alerta
+            <button
+              onClick={() => {
+                const type = document.getElementById("alertType").value;
+                const value = parseFloat(document.getElementById("alertValue").value);
+                addAlert(type, value);
+              }}
+              className="bg-neutral-700 hover:bg-neutral-600 px-3 py-2 rounded text-neutral-100 transition-colors"
+            >
+              Añadir
             </button>
-          </form>
+          </div>
+          <ul className="mt-3 space-y-2">
+            {alerts.map((a) => (
+              <li key={a.id} className="flex justify-between bg-neutral-800 p-2 rounded text-neutral-200">
+                {formatAlertText(a, coin)}
+                <button onClick={() => removeAlert(a.id)} className="text-red-400">
+                  Quitar
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+        
+        {/* Formulario de email */}
+        <div className="lg:col-span-3 bg-neutral-900 p-4 rounded-xl border border-neutral-800">
+            <h2 className="text-lg font-bold text-white">Recibe Alertas por Email</h2>
+            <p className="text-sm text-neutral-500 mb-4">Regístrate para recibir notificaciones cuando tus alertas se activen.</p>
+            <div className="flex flex-col md:flex-row flex-wrap gap-4 items-start">
+                <input
+                    id="emailInput"
+                    type="email"
+                    placeholder="Introduce tu email"
+                    className="p-2 rounded bg-neutral-800 text-neutral-200 w-full md:w-auto flex-grow"
+                />
+                <div className="flex flex-wrap gap-2 w-full md:w-auto">
+                    <select id="alertTypeEmail" className="p-2 rounded bg-neutral-800 text-neutral-200">
+                        <option value="priceAbove">Precio {'>'} X</option>
+                        <option value="priceBelow">Precio {'<'} X</option>
+                        <option value="rsiAbove">RSI {'>'} X</option>
+                        <option value="rsiBelow">RSI {'<'} X</option>
+                    </select>
+                    <input
+                        id="alertValueEmail"
+                        type="number"
+                        className="p-2 rounded bg-neutral-800 text-neutral-200 w-24"
+                        placeholder="Valor"
+                    />
+                    <button
+                        onClick={handleRegisterAlert}
+                        className="bg-neutral-700 hover:bg-neutral-600 px-3 py-2 rounded text-neutral-100 transition-colors"
+                    >
+                        Activar Alerta
+                    </button>
+                </div>
+            </div>
         </div>
       </main>
+
+      <footer className="p-6 text-center text-neutral-600 text-sm">
+        <p>La información en esta página es solo para fines informativos y no debe ser considerada asesoramiento financiero. El trading conlleva un alto riesgo de pérdida.</p>
+        <p className="mt-2">© 2024 Trading Dashboard</p>
+      </footer>
     </div>
   );
 }
