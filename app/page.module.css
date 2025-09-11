@@ -13,3 +13,95 @@
   font-size: 2.5em;
   color: #333;
 }
+
+.userContainer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  margin-top: -20px;
+}
+
+.userEmail {
+  margin-right: 15px;
+  font-weight: 600;
+  color: #555;
+}
+
+.signOutButton {
+  padding: 8px 15px;
+  background-color: #e74c3c;
+  color: white;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: background-color 0.3s ease;
+}
+
+.signOutButton:hover {
+  background-color: #c0392b;
+}
+
+.main {
+  display: flex;
+  flex-direction: column;
+  gap: 40px;
+}
+
+.dataContainer {
+  display: flex;
+  justify-content: space-around;
+  flex-wrap: wrap;
+  gap: 20px;
+}
+
+.cryptoCard {
+  background-color: white;
+  padding: 20px;
+  border-radius: 10px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  text-align: center;
+  min-width: 200px;
+}
+
+.formContainer {
+  background-color: #f9f9f9;
+  padding: 30px;
+  border-radius: 10px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  max-width: 500px;
+  margin: 0 auto;
+}
+
+.alertForm {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.alertForm label {
+  font-weight: 600;
+  color: #444;
+}
+
+.alertForm select,
+.alertForm input {
+  padding: 10px;
+  border: 1px solid #ccc;
+  border-radius: 5px;
+  font-size: 1em;
+}
+
+.submitButton {
+  padding: 12px 20px;
+  background-color: #3498db;
+  color: white;
+  border: none;
+  border-radius: 5px;
+  font-size: 1.1em;
+  cursor: pointer;
+  transition: background-color 0.3s ease;
+}
+
+.submitButton:hover {
+  background-color: #2980b9;
+}
