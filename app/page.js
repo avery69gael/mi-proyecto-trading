@@ -329,16 +329,15 @@ export default function Home() {
         }])
       });
 
-      const data = await response.json();
-
       if (!response.ok) {
-        throw new Error(data.message || 'Error al registrar la alerta.');
+        const data = await response.json();
+        throw new Error(data.message || 'Error al registrar la alerta. Por favor, revisa tus permisos en Supabase.');
       }
 
       toast.success('Alerta registrada con éxito');
     } catch (error) {
       console.error('Error al registrar la alerta:', error);
-      toast.error('No se pudo registrar la alerta.');
+      toast.error(`No se pudo registrar la alerta. Motivo: ${error.message}`);
     }
   }
   // --- Fin del código de Supabase ---
