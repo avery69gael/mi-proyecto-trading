@@ -429,10 +429,10 @@ export default function Home() {
           <h2 className="text-lg font-bold text-white">Alertas Inteligentes</h2>
           <div className="flex flex-wrap gap-2 mt-2 items-center">
             <select id="alertType" className="p-2 rounded bg-neutral-800 text-neutral-200">
-              <option value="priceAbove">Precio &gt; X</option>
-              <option value="priceBelow">Precio &lt; X</option>
-              <option value="rsiAbove">RSI &gt; X</option>
-              <option value="rsiBelow">RSI &lt; X</option>
+              <option value="priceAbove">Precio {'>'} X</option>
+              <option value="priceBelow">Precio {'<'} X</option>
+              <option value="rsiAbove">RSI {'>'} X</option>
+              <option value="rsiBelow">RSI {'<'} X</option>
             </select>
             <input
               id="alertValue"
@@ -476,10 +476,10 @@ export default function Home() {
                 />
                 <div className="flex flex-wrap gap-2 w-full md:w-auto">
                     <select id="alertTypeEmail" className="p-2 rounded bg-neutral-800 text-neutral-200">
-                        <option value="priceAbove">Precio > X</option>
-                        <option value="priceBelow">Precio < X</option>
-                        <option value="rsiAbove">RSI > X</option>
-                        <option value="rsiBelow">RSI < X</option>
+                        <option value="priceAbove">Precio {'>'} X</option>
+                        <option value="priceBelow">Precio {'<'} X</option>
+                        <option value="rsiAbove">RSI {'>'} X</option>
+                        <option value="rsiBelow">RSI {'<'} X</option>
                     </select>
                     <input
                         id="alertValueEmail"
