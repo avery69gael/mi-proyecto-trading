@@ -1,4 +1,5 @@
 'use client';
+
 import { useState, useEffect, useRef } from "react";
 import { createClientComponentClient } from '@supabase/supabase-js';
 import {
@@ -12,11 +13,84 @@ import {
   ReferenceLine,
 } from "recharts";
 import toast, { Toaster } from "react-hot-toast";
-import Auth from './components/Auth'; // Importamos el nuevo componente de autenticación
 
 // Este comentario forzará un nuevo despliegue en Vercel
 const supabase = createClientComponentClient();
 
+// Componente de autenticación
+function Auth() {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [view, setView] = useState('sign_in');
+
+  const handleSignUp = async (e) => {
+    e.preventDefault();
+    const { error } = await supabase.auth.signUp({
+      email,
+      password,
+    });
+    if (error) {
+      toast.error(error.message);
+    } else {
+      toast.success('¡Registro exitoso! Por favor, revisa tu email para confirmar tu cuenta.');
+    }
+  };
+
+  const handleSignIn = async (e) => {
+    e.preventDefault();
+    const { error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
+    if (error) {
+      toast.error(error.message);
+    } else {
+      toast.success('¡Inicio de sesión exitoso!');
+    }
+  };
+
+  return (
+    <div className="flex flex-col items-center justify-center p-6 bg-neutral-900 rounded-xl border border-neutral-800 shadow-lg">
+      <h2 className="text-xl font-bold text-white mb-4">
+        {view === 'sign_in' ? 'Iniciar Sesión' : 'Registrarse'}
+      </h2>
+      <form onSubmit={view === 'sign_in' ? handleSignIn : handleSignUp} className="w-full max-w-sm flex flex-col gap-4">
+        <input
+          type="email"
+          name="email"
+          placeholder="Correo electrónico"
+          onChange={(e) => setEmail(e.target.value)}
+          value={email}
+          required
+          className="p-3 rounded-lg bg-neutral-800 text-neutral-200 border border-neutral-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+        />
+        <input
+          type="password"
+          name="password"
+          placeholder="Contraseña"
+          onChange={(e) => setPassword(e.target.value)}
+          value={password}
+          required
+          className="p-3 rounded-lg bg-neutral-800 text-neutral-200 border border-neutral-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+        />
+        <button
+          type="submit"
+          className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg transition-colors"
+        >
+          {view === 'sign_in' ? 'Iniciar Sesión' : 'Registrarse'}
+        </button>
+      </form>
+      <button
+        onClick={() => setView(view === 'sign_in' ? 'sign_up' : 'sign_in')}
+        className="mt-4 text-sm text-neutral-400 hover:text-white transition-colors"
+      >
+        {view === 'sign_in' ? '¿No tienes cuenta? Regístrate' : '¿Ya tienes cuenta? Inicia sesión'}
+      </button>
+    </div>
+  );
+}
+
+// Componente principal de la página
 export default function Home() {
   const [coin, setCoin] = useState("bitcoin");
   const [data, setData] = useState([]);
@@ -368,8 +442,6 @@ export default function Home() {
     }
   };
 
-
-  // Renderizado condicional
   return (
     <div className="min-h-screen bg-neutral-950 text-neutral-300 font-sans">
       <Toaster position="bottom-right" />
@@ -424,7 +496,6 @@ export default function Home() {
             )}
           </div>
 
-          {/* Gráfico principal */}
           <div className="lg:col-span-2 bg-neutral-900 p-4 rounded-xl border border-neutral-800">
             <h2 className="text-lg font-bold text-white">Histórico de Precios</h2>
             <ResponsiveContainer width="100%" height={300}>
@@ -440,7 +511,6 @@ export default function Home() {
             </ResponsiveContainer>
           </div>
 
-          {/* Gráfico RSI */}
           <div className="bg-neutral-900 p-4 rounded-xl border border-neutral-800">
             <h2 className="text-lg font-bold text-white">RSI (14 días)</h2>
             <ResponsiveContainer width="100%" height={200}>
@@ -456,7 +526,6 @@ export default function Home() {
             </ResponsiveContainer>
           </div>
 
-          {/* Alertas */}
           <div className="lg:col-span-3 bg-neutral-900 p-4 rounded-xl border border-neutral-800">
             <h2 className="text-lg font-bold text-white">Alertas Inteligentes</h2>
             <div className="flex flex-wrap gap-2 mt-2 items-center">
@@ -501,7 +570,6 @@ export default function Home() {
             </ul>
           </div>
           
-          {/* Formulario de email */}
           <div className="lg:col-span-3 bg-neutral-900 p-4 rounded-xl border border-neutral-800">
             <h2 className="text-lg font-bold text-white">Recibe Alertas por Email</h2>
             <p className="text-sm text-neutral-500 mb-4">Regístrate para recibir notificaciones cuando tus alertas se activen.</p>
