@@ -1,5 +1,6 @@
 'use client';
 import { useState, useEffect, useRef } from "react";
+import { createClientComponentClient } from '@supabase/supabase-js';
 import {
   LineChart,
   Line,
@@ -11,6 +12,9 @@ import {
   ReferenceLine,
 } from "recharts";
 import toast, { Toaster } from "react-hot-toast";
+import Auth from './components/Auth'; // Importamos el nuevo componente de autenticación
+
+const supabase = createClientComponentClient();
 
 export default function Home() {
   const [coin, setCoin] = useState("bitcoin");
@@ -24,8 +28,9 @@ export default function Home() {
   const [error, setError] = useState(null);
   const [lastUpdate, setLastUpdate] = useState(null);
   const [alerts, setAlerts] = useState([]);
+  const [session, setSession] = useState(null); // Nuevo estado para la sesión del usuario
 
-  // Estados para el formulario de email
+  // Estado para el formulario de email
   const [email, setEmail] = useState("");
   const [emailAlertType, setEmailAlertType] = useState("priceAbove");
   const [emailAlertValue, setEmailAlertValue] = useState("");
@@ -34,6 +39,21 @@ export default function Home() {
   const retryTimerRef = useRef(null);
   const debounceTimerRef = useRef(null);
   const backoffRef = useRef(0);
+
+  // ---------- Manejo de sesión de usuario ----------
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+    });
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
 
   // ---------- utils ----------
   const saveToLocal = (key, value) => {
@@ -301,20 +321,17 @@ export default function Home() {
     setAlerts((prev) => prev.filter((a) => a.id !== id));
   }
 
-  // --- Función para enviar el email de alerta de forma segura
+  // Función para enviar el email de alerta de forma segura
   const handleRegisterAlert = async () => {
-    // Tomamos los valores del formulario
     const currentEmail = document.getElementById("emailInput").value;
     const currentAlertType = document.getElementById("alertTypeEmail").value;
     const currentAlertValue = parseFloat(document.getElementById("alertValueEmail").value);
 
-    // Verificamos que los datos sean válidos
     if (!currentEmail || !currentAlertType || isNaN(currentAlertValue)) {
       toast.error("Por favor, rellena todos los campos.");
       return;
     }
 
-    // Usamos el API que creamos en el servidor
     try {
       const response = await fetch('/api/send-email', {
         method: 'POST',
@@ -340,162 +357,187 @@ export default function Home() {
     }
   };
 
-  // --- Fin de la función para enviar email ---
+  // Función para cerrar sesión
+  const handleSignOut = async () => {
+    const { error } = await supabase.auth.signOut();
+    if (error) {
+      toast.error('No se pudo cerrar la sesión.');
+    } else {
+      toast.success('Sesión cerrada con éxito.');
+    }
+  };
 
-  // ---------- UI ----------
+
+  // Renderizado condicional
   return (
     <div className="min-h-screen bg-neutral-950 text-neutral-300 font-sans">
       <Toaster position="bottom-right" />
       <header className="bg-neutral-900 p-4 border-b border-neutral-800 flex flex-col md:flex-row justify-between items-center gap-3">
         <h1 className="text-xl md:text-2xl font-bold text-white">Trading Dashboard</h1>
-        <select
-          value={coin}
-          onChange={(e) => setCoin(e.target.value)}
-          className="bg-neutral-800/70 p-2 rounded border border-neutral-700 text-neutral-200"
-        >
-          <option value="bitcoin">Bitcoin (BTC)</option>
-          <option value="ethereum">Ethereum (ETH)</option>
-          <option value="solana">Solana (SOL)</option>
-          <option value="dogecoin">Dogecoin (DOGE)</option>
-          <option value="cardano">Cardano (ADA)</option>
-        </select>
-      </header>
-
-      {loading && <p className="p-6 text-center text-neutral-500">Cargando...</p>}
-      {error && <p className="p-6 text-center text-red-500">{error}</p>}
-
-      <main className="p-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="bg-neutral-900 rounded-xl p-6 border border-neutral-800">
-          <h2 className="text-lg font-bold text-white">Precio Actual</h2>
-          <p className="text-3xl mt-2 text-white">{price ? `$${price}` : "—"}</p>
-          <p className="text-sm mt-2 text-neutral-400">Última actualización: {lastUpdate}</p>
-        </div>
-
-        <div className="bg-neutral-900 rounded-xl p-6 border border-neutral-800">
-          <h2 className="text-lg font-bold text-white">Datos de Mercado</h2>
-          <p className="text-neutral-400">Volumen: ${formatNumber(extraData.volume)}</p>
-          <p className="text-neutral-400">Capitalización: ${formatNumber(extraData.marketCap)}</p>
-          <p className="text-neutral-400">Dominancia BTC: {extraData.btcDominance ?? "—"}%</p>
-        </div>
-
-        <div className="bg-neutral-900 rounded-xl p-6 border border-neutral-800">
-          <h2 className="text-lg font-bold text-white">Señal IA</h2>
-          {signal ? (
-            <>
-              <p className="text-neutral-400">Recomendación: {signal.recommendation}</p>
-              <p className="text-neutral-400">Probabilidad: {signal.probability}%</p>
-              <p className="text-neutral-400">RSI: {signal.rsi}</p>
-            </>
-          ) : (
-            <p className="text-neutral-400">—</p>
-          )}
-        </div>
-
-        {/* Gráfico principal */}
-        <div className="lg:col-span-2 bg-neutral-900 p-4 rounded-xl border border-neutral-800">
-          <h2 className="text-lg font-bold text-white">Histórico de Precios</h2>
-          <ResponsiveContainer width="100%" height={300}>
-            <LineChart data={data}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#444" />
-              <XAxis dataKey="date" stroke="#666" tickFormatter={(v) => v.slice(0, 5)} />
-              <YAxis domain={["dataMin", "dataMax"]} stroke="#666" />
-              <Tooltip />
-              <Line type="monotone" dataKey="price" stroke="#8884d8" name="Precio" />
-              <Line type="monotone" dataKey="ma7" stroke="#82ca9d" name="MA7" dot={false} />
-              <Line type="monotone" dataKey="ma30" stroke="#f6ad55" name="MA30" dot={false} />
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
-
-        {/* Gráfico RSI */}
-        <div className="bg-neutral-900 p-4 rounded-xl border border-neutral-800">
-          <h2 className="text-lg font-bold text-white">RSI (14 días)</h2>
-          <ResponsiveContainer width="100%" height={200}>
-            <LineChart data={data}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#444" />
-              <XAxis dataKey="date" hide />
-              <YAxis domain={[0, 100]} stroke="#666" />
-              <Tooltip />
-              <Line type="monotone" dataKey="rsi" stroke="#66bb6a" name="RSI" />
-              <ReferenceLine y={70} stroke="#ef4444" strokeDasharray="3 3" label={{ value: "Sobrecompra", position: "insideTopRight", fill: "#ef4444" }} />
-              <ReferenceLine y={30} stroke="#22c55e" strokeDasharray="3 3" label={{ value: "Sobreventa", position: "insideBottomLeft", fill: "#22c55e" }} />
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
-
-        {/* Alertas */}
-        <div className="lg:col-span-3 bg-neutral-900 p-4 rounded-xl border border-neutral-800">
-          <h2 className="text-lg font-bold text-white">Alertas Inteligentes</h2>
-          <div className="flex flex-wrap gap-2 mt-2 items-center">
-            <select id="alertType" className="p-2 rounded bg-neutral-800 text-neutral-200">
-              <option value="priceAbove">Precio {'>'} X</option>
-              <option value="priceBelow">Precio {'<'} X</option>
-              <option value="rsiAbove">RSI {'>'} X</option>
-              <option value="rsiBelow">RSI {'<'} X</option>
-            </select>
-            <input
-              id="alertValue"
-              type="number"
-              className="p-2 rounded bg-neutral-800 text-neutral-200 w-24"
-              placeholder="Valor"
-            />
+        {session && (
+          <div className="flex items-center gap-4">
+            <p className="text-neutral-400 text-sm">Sesión iniciada como: {session.user.email}</p>
             <button
-              onClick={() => {
-                const type = document.getElementById("alertType").value;
-                const value = parseFloat(document.getElementById("alertValue").value);
-                addAlert(type, value);
-              }}
-              className="bg-neutral-700 hover:bg-neutral-600 px-3 py-2 rounded text-neutral-100 transition-colors"
+              onClick={handleSignOut}
+              className="bg-red-600 hover:bg-red-700 px-3 py-2 rounded text-white transition-colors"
             >
-              Añadir
+              Cerrar sesión
             </button>
           </div>
-          <ul className="mt-3 space-y-2">
-            {alerts.map((a) => (
-              <li key={a.id} className="flex justify-between bg-neutral-800 p-2 rounded text-neutral-200">
-                {formatAlertText(a, coin)}
-                <button onClick={() => removeAlert(a.id)} className="text-red-400">
-                  Quitar
-                </button>
-              </li>
-            ))}
-          </ul>
-        </div>
-        
-        {/* Formulario de email */}
-        <div className="lg:col-span-3 bg-neutral-900 p-4 rounded-xl border border-neutral-800">
+        )}
+      </header>
+
+      {/* Condición para mostrar el dashboard o el formulario de autenticación */}
+      {!session ? (
+        <main className="p-6 flex items-center justify-center min-h-screen-auth">
+          <Auth />
+        </main>
+      ) : (
+        <main className="p-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {loading && <p className="p-6 text-center text-neutral-500">Cargando...</p>}
+          {error && <p className="p-6 text-center text-red-500">{error}</p>}
+
+          <div className="bg-neutral-900 rounded-xl p-6 border border-neutral-800">
+            <h2 className="text-lg font-bold text-white">Precio Actual</h2>
+            <p className="text-3xl mt-2 text-white">{price ? `$${price}` : "—"}</p>
+            <p className="text-sm mt-2 text-neutral-400">Última actualización: {lastUpdate}</p>
+          </div>
+
+          <div className="bg-neutral-900 rounded-xl p-6 border border-neutral-800">
+            <h2 className="text-lg font-bold text-white">Datos de Mercado</h2>
+            <p className="text-neutral-400">Volumen: ${formatNumber(extraData.volume)}</p>
+            <p className="text-neutral-400">Capitalización: ${formatNumber(extraData.marketCap)}</p>
+            <p className="text-neutral-400">Dominancia BTC: {extraData.btcDominance ?? "—"}%</p>
+          </div>
+
+          <div className="bg-neutral-900 rounded-xl p-6 border border-neutral-800">
+            <h2 className="text-lg font-bold text-white">Señal IA</h2>
+            {signal ? (
+              <>
+                <p className="text-neutral-400">Recomendación: {signal.recommendation}</p>
+                <p className="text-neutral-400">Probabilidad: {signal.probability}%</p>
+                <p className="text-neutral-400">RSI: {signal.rsi}</p>
+              </>
+            ) : (
+              <p className="text-neutral-400">—</p>
+            )}
+          </div>
+
+          {/* Gráfico principal */}
+          <div className="lg:col-span-2 bg-neutral-900 p-4 rounded-xl border border-neutral-800">
+            <h2 className="text-lg font-bold text-white">Histórico de Precios</h2>
+            <ResponsiveContainer width="100%" height={300}>
+              <LineChart data={data}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#444" />
+                <XAxis dataKey="date" stroke="#666" tickFormatter={(v) => v.slice(0, 5)} />
+                <YAxis domain={["dataMin", "dataMax"]} stroke="#666" />
+                <Tooltip />
+                <Line type="monotone" dataKey="price" stroke="#8884d8" name="Precio" />
+                <Line type="monotone" dataKey="ma7" stroke="#82ca9d" name="MA7" dot={false} />
+                <Line type="monotone" dataKey="ma30" stroke="#f6ad55" name="MA30" dot={false} />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+
+          {/* Gráfico RSI */}
+          <div className="bg-neutral-900 p-4 rounded-xl border border-neutral-800">
+            <h2 className="text-lg font-bold text-white">RSI (14 días)</h2>
+            <ResponsiveContainer width="100%" height={200}>
+              <LineChart data={data}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#444" />
+                <XAxis dataKey="date" hide />
+                <YAxis domain={[0, 100]} stroke="#666" />
+                <Tooltip />
+                <Line type="monotone" dataKey="rsi" stroke="#66bb6a" name="RSI" />
+                <ReferenceLine y={70} stroke="#ef4444" strokeDasharray="3 3" label={{ value: "Sobrecompra", position: "insideTopRight", fill: "#ef4444" }} />
+                <ReferenceLine y={30} stroke="#22c55e" strokeDasharray="3 3" label={{ value: "Sobreventa", position: "insideBottomLeft", fill: "#22c55e" }} />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+
+          {/* Alertas */}
+          <div className="lg:col-span-3 bg-neutral-900 p-4 rounded-xl border border-neutral-800">
+            <h2 className="text-lg font-bold text-white">Alertas Inteligentes</h2>
+            <div className="flex flex-wrap gap-2 mt-2 items-center">
+              <select
+                id="alertType"
+                className="p-2 rounded bg-neutral-800 text-neutral-200"
+              >
+                <option value="priceAbove">Precio {'>'} X</option>
+                <option value="priceBelow">Precio {'<'} X</option>
+                <option value="rsiAbove">RSI {'>'} X</option>
+                <option value="rsiBelow">RSI {'<'} X</option>
+              </select>
+              <input
+                id="alertValue"
+                type="number"
+                className="p-2 rounded bg-neutral-800 text-neutral-200 w-24"
+                placeholder="Valor"
+              />
+              <button
+                onClick={() => {
+                  const type = document.getElementById("alertType").value;
+                  const value = parseFloat(document.getElementById("alertValue").value);
+                  addAlert(type, value);
+                }}
+                className="bg-neutral-700 hover:bg-neutral-600 px-3 py-2 rounded text-neutral-100 transition-colors"
+              >
+                Añadir
+              </button>
+            </div>
+            <ul className="mt-3 space-y-2">
+              {alerts.map((a) => (
+                <li
+                  key={a.id}
+                  className="flex justify-between bg-neutral-800 p-2 rounded text-neutral-200"
+                >
+                  {formatAlertText(a, coin)}
+                  <button onClick={() => removeAlert(a.id)} className="text-red-400">
+                    Quitar
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+          
+          {/* Formulario de email */}
+          <div className="lg:col-span-3 bg-neutral-900 p-4 rounded-xl border border-neutral-800">
             <h2 className="text-lg font-bold text-white">Recibe Alertas por Email</h2>
             <p className="text-sm text-neutral-500 mb-4">Regístrate para recibir notificaciones cuando tus alertas se activen.</p>
             <div className="flex flex-col md:flex-row flex-wrap gap-4 items-start">
+              <input
+                id="emailInput"
+                type="email"
+                placeholder="Introduce tu email"
+                className="p-2 rounded bg-neutral-800 text-neutral-200 w-full md:w-auto flex-grow"
+              />
+              <div className="flex flex-wrap gap-2 w-full md:w-auto">
+                <select
+                  id="alertTypeEmail"
+                  className="p-2 rounded bg-neutral-800 text-neutral-200"
+                >
+                  <option value="priceAbove">Precio {'>'} X</option>
+                  <option value="priceBelow">Precio {'<'} X</option>
+                  <option value="rsiAbove">RSI {'>'} X</option>
+                  <option value="rsiBelow">RSI {'<'} X</option>
+                </select>
                 <input
-                    id="emailInput"
-                    type="email"
-                    placeholder="Introduce tu email"
-                    className="p-2 rounded bg-neutral-800 text-neutral-200 w-full md:w-auto flex-grow"
+                  id="alertValueEmail"
+                  type="number"
+                  className="p-2 rounded bg-neutral-800 text-neutral-200 w-24"
+                  placeholder="Valor"
                 />
-                <div className="flex flex-wrap gap-2 w-full md:w-auto">
-                    <select id="alertTypeEmail" className="p-2 rounded bg-neutral-800 text-neutral-200">
-                        <option value="priceAbove">Precio {'>'} X</option>
-                        <option value="priceBelow">Precio {'<'} X</option>
-                        <option value="rsiAbove">RSI {'>'} X</option>
-                        <option value="rsiBelow">RSI {'<'} X</option>
-                    </select>
-                    <input
-                        id="alertValueEmail"
-                        type="number"
-                        className="p-2 rounded bg-neutral-800 text-neutral-200 w-24"
-                        placeholder="Valor"
-                    />
-                    <button
-                        onClick={handleRegisterAlert}
-                        className="bg-neutral-700 hover:bg-neutral-600 px-3 py-2 rounded text-neutral-100 transition-colors"
-                    >
-                        Activar Alerta
-                    </button>
-                </div>
+                <button
+                  onClick={handleRegisterAlert}
+                  className="bg-neutral-700 hover:bg-neutral-600 px-3 py-2 rounded text-neutral-100 transition-colors"
+                >
+                  Activar Alerta
+                </button>
+              </div>
             </div>
-        </div>
-      </main>
+          </div>
+        </main>
+      )}
 
       <footer className="p-6 text-center text-neutral-600 text-sm">
         <p>La información en esta página es solo para fines informativos y no debe ser considerada asesoramiento financiero. El trading conlleva un alto riesgo de pérdida.</p>
@@ -504,10 +546,3 @@ export default function Home() {
     </div>
   );
 }
-
-
-
-
-
-
-
