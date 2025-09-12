@@ -14,6 +14,7 @@ import {
 import toast, { Toaster } from "react-hot-toast";
 import Auth from './components/Auth'; // Importamos el nuevo componente de autenticación
 
+// Este comentario forzará un nuevo despliegue en Vercel
 const supabase = createClientComponentClient();
 
 export default function Home() {
