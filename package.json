@@ -4,10 +4,9 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "npx tailwindcss -i ./styles/globals.css -o ./styles/tailwind.css && next build",
     "start": "next start",
-    "lint": "next lint",
-    "postinstall": "npx tailwindcss init"
+    "lint": "next lint"
   },
   "dependencies": {
     "@supabase/supabase-js": "2.39.7",
