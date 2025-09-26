@@ -1,7 +1,8 @@
 'use client';
 
 import { useState, useEffect, useRef } from "react";
-import { createClientComponentClient } from '@supabase/supabase-js';
+// CORRECCIÓN: Usamos createBrowserClient y corregimos la importación
+import { createBrowserClient } from '@supabase/supabase-js'; 
 import {
   LineChart,
   Line,
@@ -14,8 +15,8 @@ import {
 } from "recharts";
 import toast, { Toaster } from "react-hot-toast";
 
-// Este comentario forzará un nuevo despliegue en Vercel
-const supabase = createClientComponentClient();
+// CORRECCIÓN: La instancia se crea con createBrowserClient
+const supabase = createBrowserClient();
 
 // Componente de autenticación
 function Auth() {
@@ -230,7 +231,7 @@ export default function Home() {
   // ---------- fetch de datos refactorizado ----------
   async function fetchHistoricalData(coin, signal) {
     const response = await fetch(
-      `https://api.coingecko.com/api/v3/coins/${coin}/market_chart?vs_currency=usd&days=30&interval=daily`,
+      `https://api.coingecko.com/api/v3/coins/${coin}/market-chart?vs_currency=usd&days=30&interval=daily`,
       { signal }
     );
     if (!response.ok) throw new Error("Histórico falló");
