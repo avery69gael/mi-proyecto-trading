@@ -24,7 +24,7 @@ const App = () => {
     // --- UTILITY FUNCTIONS ---
 
     const showToast = useCallback((message, isError = false) => {
-        setToast({ message, isError, visible: true });
+        setToast(t => ({ message, isError, visible: true })); // Usar el estado parcial para manejar la visibilidad
         setTimeout(() => setToast(t => ({ ...t, visible: false })), 5000);
     }, []);
 
@@ -139,6 +139,8 @@ const App = () => {
         
         try {
             const alertsRef = collection(firebaseServices.db, `artifacts/${appId}/users/${user.uid}/alerts`);
+            
+            // Consulta: Solo alertas para la moneda actualmente seleccionada
             const alertsQuery = query(alertsRef, where("coin", "==", currentCoin));
 
             unsubscribeAlerts = onSnapshot(alertsQuery, (snapshot) => {
@@ -169,7 +171,7 @@ const App = () => {
                 return;
             }
             await createUserWithEmailAndPassword(firebaseServices.auth, email, password);
-            showToast('¡Registro exitoso!');
+            showToast('¡Registro exitoso! Por favor, inicia sesión con tu nueva cuenta.');
         } catch (error) {
             showToast(`Error de registro: ${error.message}`, true);
         }
@@ -258,9 +260,9 @@ const App = () => {
                         const password = e.target.elements['signin-password'].value;
                         handleSignIn(email, password);
                     }} className="w-full space-y-4">
-                        <input type="email" id="signin-email" placeholder="Correo electrónico" required 
+                        <input type="email" name="signin-email" placeholder="Correo electrónico" required 
                             className="w-full p-3 rounded-lg bg-neutral-800 text-neutral-200 border border-neutral-700 focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                        <input type="password" id="signin-password" placeholder="Contraseña" required 
+                        <input type="password" name="signin-password" placeholder="Contraseña" required 
                             className="w-full p-3 rounded-lg bg-neutral-800 text-neutral-200 border border-neutral-700 focus:outline-none focus:ring-2 focus:ring-blue-500" />
                         <button type="submit"
                             className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg transition-colors shadow-lg">
@@ -277,9 +279,9 @@ const App = () => {
                         handleSignUp(email, password);
                     }} className="w-full space-y-4">
                         <p className="text-sm text-neutral-400">¿Nuevo usuario? Regístrate:</p>
-                        <input type="email" id="signup-email" placeholder="Correo electrónico" required 
+                        <input type="email" name="signup-email" placeholder="Correo electrónico" required 
                             className="w-full p-3 rounded-lg bg-neutral-800 text-neutral-200 border border-neutral-700 focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                        <input type="password" id="signup-password" placeholder="Contraseña (mín. 6 caracteres)" required 
+                        <input type="password" name="signup-password" placeholder="Contraseña (mín. 6 caracteres)" required 
                             className="w-full p-3 rounded-lg bg-neutral-800 text-neutral-200 border border-neutral-700 focus:outline-none focus:ring-2 focus:ring-blue-500" />
                         <button type="submit"
                             className="w-full bg-neutral-600 hover:bg-neutral-700 text-white font-bold py-3 px-4 rounded-lg transition-colors">
@@ -403,7 +405,7 @@ const App = () => {
                         <h2 className="text-xl font-bold text-white mb-4">Añadir Alerta (Persistente)</h2>
                         <form onSubmit={handleAddAlert} className="flex flex-col md:flex-row gap-4 items-center">
                             <select name="alert-type" className="p-3 rounded-lg bg-neutral-800 text-neutral-200 border border-neutral-700 focus:outline-none focus:ring-2 focus:ring-blue-500">
-                                <option value="priceAbove">Precio > X</option>
+                                <option value="priceAbove">Precio &gt; X</option>
                                 <option value="priceBelow">Precio &lt; X</option>
                             </select>
                             <input type="number" step="any" name="alert-value" placeholder="Valor (e.g., 50000)" className="p-3 rounded-lg bg-neutral-800 text-neutral-200 border border-neutral-700 focus:outline-none focus:ring-2 focus:ring-blue-500 w-full md:w-48" />
