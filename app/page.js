@@ -1,8 +1,8 @@
 'use client';
 
 import { useState, useEffect, useRef } from "react";
-// CORRECCIÓN: Usamos createBrowserClient y corregimos la importación
-import { createBrowserClient } from '@supabase/supabase-js'; 
+// Se importa el cliente de Supabase desde el módulo principal, asumiendo que se creará la instancia manualmente.
+import { createClient } from '@supabase/supabase-js'; 
 import {
   LineChart,
   Line,
@@ -15,8 +15,13 @@ import {
 } from "recharts";
 import toast, { Toaster } from "react-hot-toast";
 
-// CORRECCIÓN: La instancia se crea con createBrowserClient
-const supabase = createBrowserClient();
+// CORRECCIÓN: Usamos createClient ya que 'createBrowserClient' no se encuentra.
+// NOTA: Para que esto funcione, DEBES configurar tus variables de entorno en el Canvas (SUPABASE_URL y SUPABASE_ANON_KEY).
+const supabaseUrl = process.env.SUPABASE_URL || 'YOUR_SUPABASE_URL'; 
+const supabaseAnonKey = process.env.SUPABASE_ANON_KEY || 'YOUR_SUPABASE_ANON_KEY';
+
+// En un entorno de React/Next.js, el cliente se inicializa así:
+const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 // Componente de autenticación
 function Auth() {
@@ -26,6 +31,7 @@ function Auth() {
 
   const handleSignUp = async (e) => {
     e.preventDefault();
+    // Usamos supabase.auth para la autenticación
     const { error } = await supabase.auth.signUp({
       email,
       password,
@@ -104,10 +110,9 @@ export default function Home() {
   const [error, setError] = useState(null);
   const [lastUpdate, setLastUpdate] = useState(null);
   const [alerts, setAlerts] = useState([]);
-  const [session, setSession] = useState(null); // Nuevo estado para la sesión del usuario
+  const [session, setSession] = useState(null); // Estado para la sesión del usuario
 
-  // Estado para el formulario de email
-  const [email, setEmail] = useState("");
+  // Estado para el formulario de email (no implementado completamente sin backend/API Key)
   const [emailAlertType, setEmailAlertType] = useState("priceAbove");
   const [emailAlertValue, setEmailAlertValue] = useState("");
 
@@ -118,10 +123,12 @@ export default function Home() {
 
   // ---------- Manejo de sesión de usuario ----------
   useEffect(() => {
+    // Comprueba la sesión actual
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
     });
 
+    // Escucha los cambios de estado de la autenticación
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
@@ -397,7 +404,7 @@ export default function Home() {
     setAlerts((prev) => prev.filter((a) => a.id !== id));
   }
 
-  // Función para enviar el email de alerta de forma segura
+  // Función para enviar el email de alerta (solo placeholder)
   const handleRegisterAlert = async () => {
     const currentEmail = document.getElementById("emailInput").value;
     const currentAlertType = document.getElementById("alertTypeEmail").value;
@@ -408,29 +415,9 @@ export default function Home() {
       return;
     }
 
-    try {
-      const response = await fetch('/api/send-email', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          email: currentEmail,
-          coin: coin,
-          alert_type: currentAlertType,
-          alert_value: currentAlertValue,
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error('Error al enviar el email');
-      }
-
-      toast.success('Alerta por email registrada con éxito');
-    } catch (error) {
-      console.error('Error al registrar la alerta por email:', error);
-      toast.error('No se pudo registrar la alerta por email.');
-    }
+    // Esto sería una llamada a una API real (como Gemini) o un backend.
+    // Como no tenemos un backend para enviar emails, solo notificamos al usuario.
+    toast.success(`Alerta por email registrada (Simulada): ${currentEmail} para ${coin.toUpperCase()}`);
   };
 
   // Función para cerrar sesión
@@ -463,76 +450,99 @@ export default function Home() {
 
       {/* Condición para mostrar el dashboard o el formulario de autenticación */}
       {!session ? (
-        <main className="p-6 flex items-center justify-center min-h-screen-auth">
+        <main className="p-6 flex items-center justify-center min-h-screen-auth h-screen">
           <Auth />
         </main>
       ) : (
         <main className="p-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {loading && <p className="p-6 text-center text-neutral-500">Cargando...</p>}
-          {error && <p className="p-6 text-center text-red-500">{error}</p>}
+          {loading && <p className="lg:col-span-3 p-6 text-center text-neutral-500">Cargando datos de {coin}...</p>}
+          {error && <p className="lg:col-span-3 p-6 text-center text-red-500">{error}</p>}
+
+          <div className="lg:col-span-3">
+              <label htmlFor="coin-select" className="block text-sm font-medium text-neutral-400 mb-2">
+                Selecciona la Criptomoneda
+              </label>
+              <select
+                  id="coin-select"
+                  value={coin}
+                  onChange={(e) => setCoin(e.target.value)}
+                  className="p-3 rounded-lg bg-neutral-800 text-neutral-200 border border-neutral-700 focus:outline-none focus:ring-2 focus:ring-blue-500 w-full md:w-1/3"
+              >
+                  <option value="bitcoin">Bitcoin (BTC)</option>
+                  <option value="ethereum">Ethereum (ETH)</option>
+                  <option value="solana">Solana (SOL)</option>
+                  <option value="tether">Tether (USDT)</option>
+              </select>
+          </div>
 
           <div className="bg-neutral-900 rounded-xl p-6 border border-neutral-800">
             <h2 className="text-lg font-bold text-white">Precio Actual</h2>
-            <p className="text-3xl mt-2 text-white">{price ? `$${price}` : "—"}</p>
-            <p className="text-sm mt-2 text-neutral-400">Última actualización: {lastUpdate}</p>
+            <p className="text-3xl mt-2 text-blue-400 font-mono">{price ? `$${price}` : "—"}</p>
+            <p className="text-sm mt-2 text-neutral-500">Última actualización: {lastUpdate}</p>
           </div>
 
           <div className="bg-neutral-900 rounded-xl p-6 border border-neutral-800">
             <h2 className="text-lg font-bold text-white">Datos de Mercado</h2>
-            <p className="text-neutral-400">Volumen: ${formatNumber(extraData.volume)}</p>
-            <p className="text-neutral-400">Capitalización: ${formatNumber(extraData.marketCap)}</p>
-            <p className="text-neutral-400">Dominancia BTC: {extraData.btcDominance ?? "—"}%</p>
+            <p className="text-neutral-400">Volumen 24h: <span className="text-neutral-200 font-medium">${formatNumber(extraData.volume)}</span></p>
+            <p className="text-neutral-400">Capitalización: <span className="text-neutral-200 font-medium">${formatNumber(extraData.marketCap)}</span></p>
+            <p className="text-neutral-400">Dominancia BTC: <span className="text-neutral-200 font-medium">{extraData.btcDominance ?? "—"}%</span></p>
           </div>
 
           <div className="bg-neutral-900 rounded-xl p-6 border border-neutral-800">
             <h2 className="text-lg font-bold text-white">Señal IA</h2>
             {signal ? (
               <>
-                <p className="text-neutral-400">Recomendación: {signal.recommendation}</p>
-                <p className="text-neutral-400">Probabilidad: {signal.probability}%</p>
-                <p className="text-neutral-400">RSI: {signal.rsi}</p>
+                <p className="text-neutral-400">Recomendación: <span className={`font-bold ${signal.recommendation === 'Comprar' ? 'text-green-500' : signal.recommendation === 'Vender' ? 'text-red-500' : 'text-yellow-500'}`}>{signal.recommendation}</span></p>
+                <p className="text-neutral-400">Probabilidad: <span className="text-neutral-200 font-medium">{signal.probability}%</span></p>
+                <p className="text-neutral-400">RSI: <span className="text-neutral-200 font-medium">{signal.rsi}</span></p>
               </>
             ) : (
-              <p className="text-neutral-400">—</p>
+              <p className="text-neutral-400">— Esperando datos para generar señal —</p>
             )}
           </div>
 
           <div className="lg:col-span-2 bg-neutral-900 p-4 rounded-xl border border-neutral-800">
-            <h2 className="text-lg font-bold text-white">Histórico de Precios</h2>
+            <h2 className="text-lg font-bold text-white">Histórico de Precios y Medias Móviles (30 Días)</h2>
             <ResponsiveContainer width="100%" height={300}>
-              <LineChart data={data}>
+              <LineChart data={data} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#444" />
                 <XAxis dataKey="date" stroke="#666" tickFormatter={(v) => v.slice(0, 5)} />
-                <YAxis domain={["dataMin", "dataMax"]} stroke="#666" />
-                <Tooltip />
-                <Line type="monotone" dataKey="price" stroke="#8884d8" name="Precio" />
-                <Line type="monotone" dataKey="ma7" stroke="#82ca9d" name="MA7" dot={false} />
-                <Line type="monotone" dataKey="ma30" stroke="#f6ad55" name="MA30" dot={false} />
+                <YAxis domain={["dataMin", "dataMax"]} stroke="#666" orientation="right" />
+                <Tooltip 
+                    contentStyle={{ backgroundColor: '#171717', border: '1px solid #333', borderRadius: '4px' }}
+                    formatter={(value) => [`$${value.toFixed(2)}`, value.name]}
+                />
+                <Line type="monotone" dataKey="price" stroke="#00d4ff" name="Precio" strokeWidth={2} dot={false} />
+                <Line type="monotone" dataKey="ma7" stroke="#82ca9d" name="MA7" dot={false} strokeDasharray="5 5" />
+                <Line type="monotone" dataKey="ma30" stroke="#f6ad55" name="MA30" dot={false} strokeDasharray="3 3" />
               </LineChart>
             </ResponsiveContainer>
           </div>
 
           <div className="bg-neutral-900 p-4 rounded-xl border border-neutral-800">
-            <h2 className="text-lg font-bold text-white">RSI (14 días)</h2>
-            <ResponsiveContainer width="100%" height={200}>
-              <LineChart data={data}>
+            <h2 className="text-lg font-bold text-white">Índice de Fuerza Relativa (RSI, 14 días)</h2>
+            <ResponsiveContainer width="100%" height={300}>
+              <LineChart data={data} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#444" />
                 <XAxis dataKey="date" hide />
-                <YAxis domain={[0, 100]} stroke="#666" />
-                <Tooltip />
-                <Line type="monotone" dataKey="rsi" stroke="#66bb6a" name="RSI" />
-                <ReferenceLine y={70} stroke="#ef4444" strokeDasharray="3 3" label={{ value: "Sobrecompra", position: "insideTopRight", fill: "#ef4444" }} />
-                <ReferenceLine y={30} stroke="#22c55e" strokeDasharray="3 3" label={{ value: "Sobreventa", position: "insideBottomLeft", fill: "#22c55e" }} />
+                <YAxis domain={[0, 100]} stroke="#666" orientation="right" />
+                <Tooltip 
+                    contentStyle={{ backgroundColor: '#171717', border: '1px solid #333', borderRadius: '4px' }}
+                    formatter={(value) => [value, 'RSI']}
+                />
+                <Line type="monotone" dataKey="rsi" stroke="#66bb6a" name="RSI" strokeWidth={2} />
+                <ReferenceLine y={70} stroke="#ef4444" strokeDasharray="5 5" label={{ value: "Sobrecompra", position: "insideTopRight", fill: "#ef4444", fontSize: 12 }} />
+                <ReferenceLine y={30} stroke="#22c55e" strokeDasharray="5 5" label={{ value: "Sobreventa", position: "insideBottomLeft", fill: "#22c55e", fontSize: 12 }} />
               </LineChart>
             </ResponsiveContainer>
           </div>
 
-          <div className="lg:col-span-3 bg-neutral-900 p-4 rounded-xl border border-neutral-800">
-            <h2 className="text-lg font-bold text-white">Alertas Inteligentes</h2>
-            <div className="flex flex-wrap gap-2 mt-2 items-center">
+          <div className="lg:col-span-3 bg-neutral-900 p-6 rounded-xl border border-neutral-800">
+            <h2 className="text-xl font-bold text-white mb-4">Gestión de Alertas Locales</h2>
+            <div className="flex flex-wrap gap-3 items-center p-3 bg-neutral-800 rounded-lg">
               <select
                 id="alertType"
-                className="p-2 rounded bg-neutral-800 text-neutral-200"
+                className="p-2 rounded bg-neutral-700 text-neutral-200 border border-neutral-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
                 <option value="priceAbove">Precio {'>'} X</option>
                 <option value="priceBelow">Precio {'<'} X</option>
@@ -542,7 +552,8 @@ export default function Home() {
               <input
                 id="alertValue"
                 type="number"
-                className="p-2 rounded bg-neutral-800 text-neutral-200 w-24"
+                step="any"
+                className="p-2 rounded bg-neutral-700 text-neutral-200 w-24 border border-neutral-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 placeholder="Valor"
               />
               <button
@@ -551,19 +562,20 @@ export default function Home() {
                   const value = parseFloat(document.getElementById("alertValue").value);
                   addAlert(type, value);
                 }}
-                className="bg-neutral-700 hover:bg-neutral-600 px-3 py-2 rounded text-neutral-100 transition-colors"
+                className="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg text-white font-semibold transition-colors shadow-md"
               >
-                Añadir
+                Añadir Alerta
               </button>
             </div>
-            <ul className="mt-3 space-y-2">
+            <ul className="mt-4 space-y-2">
+              {alerts.length === 0 && <li className="text-neutral-500">No hay alertas activas.</li>}
               {alerts.map((a) => (
                 <li
                   key={a.id}
-                  className="flex justify-between bg-neutral-800 p-2 rounded text-neutral-200"
+                  className="flex justify-between items-center bg-neutral-800 p-3 rounded-lg text-neutral-200 border border-neutral-700 hover:bg-neutral-700 transition-colors"
                 >
-                  {formatAlertText(a, coin)}
-                  <button onClick={() => removeAlert(a.id)} className="text-red-400">
+                  <span className="font-medium">{formatAlertText(a, coin)}</span>
+                  <button onClick={() => removeAlert(a.id)} className="text-red-400 hover:text-red-300 transition-colors font-semibold">
                     Quitar
                   </button>
                 </li>
@@ -571,20 +583,20 @@ export default function Home() {
             </ul>
           </div>
           
-          <div className="lg:col-span-3 bg-neutral-900 p-4 rounded-xl border border-neutral-800">
-            <h2 className="text-lg font-bold text-white">Recibe Alertas por Email</h2>
-            <p className="text-sm text-neutral-500 mb-4">Regístrate para recibir notificaciones cuando tus alertas se activen.</p>
-            <div className="flex flex-col md:flex-row flex-wrap gap-4 items-start">
+          <div className="lg:col-span-3 bg-neutral-900 p-6 rounded-xl border border-neutral-800">
+            <h2 className="text-xl font-bold text-white mb-4">Simulación de Alertas por Email</h2>
+            <p className="text-sm text-neutral-500 mb-4">Esta función simula el registro de una alerta que en una aplicación real enviaría un correo (no funcional aquí).</p>
+            <div className="flex flex-col md:flex-row flex-wrap gap-4 items-start p-3 bg-neutral-800 rounded-lg">
               <input
                 id="emailInput"
                 type="email"
                 placeholder="Introduce tu email"
-                className="p-2 rounded bg-neutral-800 text-neutral-200 w-full md:w-auto flex-grow"
+                className="p-2 rounded bg-neutral-700 text-neutral-200 w-full md:w-auto flex-grow border border-neutral-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
               <div className="flex flex-wrap gap-2 w-full md:w-auto">
                 <select
                   id="alertTypeEmail"
-                  className="p-2 rounded bg-neutral-800 text-neutral-200"
+                  className="p-2 rounded bg-neutral-700 text-neutral-200 border border-neutral-600"
                 >
                   <option value="priceAbove">Precio {'>'} X</option>
                   <option value="priceBelow">Precio {'<'} X</option>
@@ -594,14 +606,15 @@ export default function Home() {
                 <input
                   id="alertValueEmail"
                   type="number"
-                  className="p-2 rounded bg-neutral-800 text-neutral-200 w-24"
+                  step="any"
+                  className="p-2 rounded bg-neutral-700 text-neutral-200 w-24 border border-neutral-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
                   placeholder="Valor"
                 />
                 <button
                   onClick={handleRegisterAlert}
-                  className="bg-neutral-700 hover:bg-neutral-600 px-3 py-2 rounded text-neutral-100 transition-colors"
+                  className="bg-green-600 hover:bg-green-700 px-4 py-2 rounded-lg text-white font-semibold transition-colors shadow-md"
                 >
-                  Activar Alerta
+                  Activar Simulación
                 </button>
               </div>
             </div>
@@ -609,9 +622,9 @@ export default function Home() {
         </main>
       )}
 
-      <footer className="p-6 text-center text-neutral-600 text-sm">
-        <p>La información en esta página es solo para fines informativos y no debe ser considerada asesoramiento financiero. El trading conlleva un alto riesgo de pérdida.</p>
-        <p className="mt-2">© 2024 Trading Dashboard</p>
+      <footer className="p-6 text-center text-neutral-600 text-sm border-t border-neutral-900 mt-6">
+        <p>Dashboard de Trading v2.0 | Datos de CoinGecko | Autenticación con Supabase</p>
+        <p className="mt-1">Recuerda: El trading conlleva un riesgo.</p>
       </footer>
     </div>
   );
