@@ -24,7 +24,8 @@ const App = () => {
     // --- UTILITY FUNCTIONS ---
 
     const showToast = useCallback((message, isError = false) => {
-        setToast(t => ({ message, isError, visible: true })); // Usar el estado parcial para manejar la visibilidad
+        // Usar un nuevo objeto de estado para asegurar la actualización y el timeout
+        setToast({ message, isError, visible: true }); 
         setTimeout(() => setToast(t => ({ ...t, visible: false })), 5000);
     }, []);
 
@@ -200,6 +201,7 @@ const App = () => {
     const handleAddAlert = async (e) => {
         e.preventDefault();
         const form = e.target;
+        // Los valores se leen por el atributo 'name'
         const type = form.elements['alert-type'].value;
         const value = parseFloat(form.elements['alert-value'].value);
         
@@ -256,6 +258,7 @@ const App = () => {
                     
                     <form onSubmit={(e) => {
                         e.preventDefault();
+                        // Leer campos por su atributo 'name'
                         const email = e.target.elements['signin-email'].value;
                         const password = e.target.elements['signin-password'].value;
                         handleSignIn(email, password);
@@ -274,6 +277,7 @@ const App = () => {
 
                     <form onSubmit={(e) => {
                         e.preventDefault();
+                        // Leer campos por su atributo 'name'
                         const email = e.target.elements['signup-email'].value;
                         const password = e.target.elements['signup-password'].value;
                         handleSignUp(email, password);
