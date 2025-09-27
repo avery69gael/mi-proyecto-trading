@@ -1,16 +1,17 @@
 "use client";
 import React, { useState, useEffect, useCallback } from 'react';
-// Importaciones de Firebase (asume que están disponibles en el entorno)
+// Importaciones modulares de Firebase (necesarias para la v9+)
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut } from 'firebase/auth';
 import { getFirestore, collection, addDoc, query, where, onSnapshot, deleteDoc, doc, setLogLevel } from 'firebase/firestore';
 
 // Componente principal
 const App = () => {
-    // --- Configuración Global (Debe ser externa en un proyecto real, pero se define aquí para el Canvas)
+    // --- Configuración Global (MANDATORIO usar __app_id, __firebase_config, __initial_auth_token)
     const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
     const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null;
-    const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initialAuthToken : null;
+    // CORRECCIÓN CLAVE: Asegurarse de usar __initial_auth_token en la asignación
+    const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null; 
 
     // --- State Management ---
     const [user, setUser] = useState(null);
@@ -25,7 +26,6 @@ const App = () => {
     // --- UTILITY FUNCTIONS ---
 
     const showToast = useCallback((message, isError = false) => {
-        // Usar un nuevo objeto de estado para asegurar la actualización y el timeout
         setToast({ message, isError, visible: true }); 
         setTimeout(() => setToast(t => ({ ...t, visible: false })), 5000);
     }, []);
@@ -108,9 +108,11 @@ const App = () => {
                 try {
                     await signInWithCustomToken(auth, initialAuthToken);
                 } catch (error) {
+                    // Si el token personalizado falla, intentar anonimamente
                     await signInAnonymously(auth);
                 }
             } else {
+                // Si no hay token personalizado, iniciar sesión anonimamente
                 await signInAnonymously(auth);
             }
         };
@@ -140,6 +142,7 @@ const App = () => {
         let unsubscribeAlerts = () => {};
         
         try {
+            // Ruta de colecciones privada: artifacts/{appId}/users/{userId}/alerts
             const alertsRef = collection(firebaseServices.db, `artifacts/${appId}/users/${user.uid}/alerts`);
             
             // Consulta: Solo alertas para la moneda actualmente seleccionada
@@ -202,7 +205,6 @@ const App = () => {
     const handleAddAlert = async (e) => {
         e.preventDefault();
         const form = e.target;
-        // Los valores se leen por el atributo 'name'
         const type = form.elements['alert-type'].value;
         const value = parseFloat(form.elements['alert-value'].value);
         
@@ -259,7 +261,6 @@ const App = () => {
                     
                     <form onSubmit={(e) => {
                         e.preventDefault();
-                        // Leer campos por su atributo 'name'
                         const email = e.target.elements['signin-email'].value;
                         const password = e.target.elements['signin-password'].value;
                         handleSignIn(email, password);
@@ -278,7 +279,6 @@ const App = () => {
 
                     <form onSubmit={(e) => {
                         e.preventDefault();
-                        // Leer campos por su atributo 'name'
                         const email = e.target.elements['signup-email'].value;
                         const password = e.target.elements['signup-password'].value;
                         handleSignUp(email, password);
