@@ -1,3 +1,4 @@
+"use client";
 import React, { useState, useEffect, useCallback } from 'react';
 // Importaciones de Firebase (asume que están disponibles en el entorno)
 import { initializeApp } from 'firebase/app';
@@ -9,7 +10,7 @@ const App = () => {
     // --- Configuración Global (Debe ser externa en un proyecto real, pero se define aquí para el Canvas)
     const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
     const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null;
-    const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+    const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initialAuthToken : null;
 
     // --- State Management ---
     const [user, setUser] = useState(null);
